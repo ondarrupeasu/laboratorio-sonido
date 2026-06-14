@@ -580,7 +580,7 @@ function initControls() {
         modStopTone();
         document.getElementById("mod-play-btn").classList.remove("playing");
         document.getElementById("mod-play-icon").innerHTML = "&#9658;";
-        document.getElementById("mod-play-label").textContent = t("generate");
+        document.getElementById("mod-play-label").textContent = t("hold_to_play");
       }
 
       if (target === "dual") {
@@ -1226,11 +1226,18 @@ function initModControls() {
     if (modOsc) modOsc.frequency.setValueAtTime(modState.frequency, modAudioCtx.currentTime);
   });
 
-  // Amplitud (afecta al pico de la envolvente; no cambia el sonido si ya esta sonando)
+  // Amplitud (en vivo: reescala el gain actual manteniendo la fase ADSR)
   const ampSlider = document.getElementById("mod-amp-slider");
   ampSlider.addEventListener("input", () => {
+    const oldAmplitude = modState.amplitude;
     modState.amplitude = parseFloat(ampSlider.value);
     modUpdateAmpDisplay();
+
+    if (modAmpGain && oldAmplitude > 0) {
+      const ratio = modState.amplitude / oldAmplitude;
+      const newGain = modAmpGain.gain.value * ratio;
+      modAmpGain.gain.setValueAtTime(newGain, modAudioCtx.currentTime);
+    }
   });
 
   // ADSR sliders (escala: attack/decay en ms 1-2000 -> 0.001-2.0 s, release 1-3000 -> 0.001-3.0 s)
@@ -1302,21 +1309,30 @@ function initModControls() {
     if (modVibratoLFOGain) modVibratoLFOGain.gain.setValueAtTime(modState.vibrato.depth, modAudioCtx.currentTime);
   });
 
-  // Play/Stop
+  // Tecla: mantener pulsado dispara Attack-Decay-Sustain, soltar dispara Release
   const modPlayBtn = document.getElementById("mod-play-btn");
-  modPlayBtn.addEventListener("click", () => {
-    if (!modIsPlaying) {
-      modStartTone();
-      modPlayBtn.classList.add("playing");
-      document.getElementById("mod-play-icon").innerHTML = "&#9632;";
-      document.getElementById("mod-play-label").textContent = t("stop");
-    } else {
-      modStopTone();
-      modPlayBtn.classList.remove("playing");
-      document.getElementById("mod-play-icon").innerHTML = "&#9658;";
-      document.getElementById("mod-play-label").textContent = t("generate");
-    }
-  });
+
+  const modPress = (e) => {
+    e.preventDefault();
+    if (modIsPlaying) return;
+    modStartTone();
+    modPlayBtn.classList.add("playing");
+    document.getElementById("mod-play-icon").innerHTML = "&#9655;";
+    document.getElementById("mod-play-label").textContent = t("playing_note");
+  };
+
+  const modRelease = (e) => {
+    if (!modIsPlaying) return;
+    modStopTone();
+    modPlayBtn.classList.remove("playing");
+    document.getElementById("mod-play-icon").innerHTML = "&#9658;";
+    document.getElementById("mod-play-label").textContent = t("hold_to_play");
+  };
+
+  modPlayBtn.addEventListener("pointerdown", modPress);
+  modPlayBtn.addEventListener("pointerup", modRelease);
+  modPlayBtn.addEventListener("pointerleave", modRelease);
+  modPlayBtn.addEventListener("pointercancel", modRelease);
 }
 
 /* ====== Init del módulo modulación ====== */

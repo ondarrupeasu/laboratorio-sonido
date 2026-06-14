@@ -44,7 +44,9 @@ const I18N = {
     rate: "Velocidad (rate)",
     depth: "Profundidad (depth)",
     envelope_view: "Envolvente ADSR",
-    mod_play_hint: "Cada pulsación dispara la envolvente ADSR completa"
+    mod_play_hint: "Simula tocar una tecla: al pulsar suena Attack-Decay-Sustain, al soltar se aplica Release",
+    hold_to_play: "Mantén pulsado para sonar",
+    playing_note: "Sonando…"
   },
   eu: {
     app_title: "Soinu Laborategia",
@@ -91,7 +93,9 @@ const I18N = {
     rate: "Abiadura (rate)",
     depth: "Sakonera (depth)",
     envelope_view: "ADSR ingurunea",
-    mod_play_hint: "Sakatze bakoitzak ADSR inguru osoa abiarazten du"
+    mod_play_hint: "Tekla bat jotzea simulatzen du: sakatzean Attack-Decay-Sustain entzungo da, askatzean Release aplikatuko da",
+    hold_to_play: "Sakatu mantenduta soinua entzuteko",
+    playing_note: "Jotzen…"
   },
   en: {
     app_title: "Sound Lab",
@@ -138,7 +142,9 @@ const I18N = {
     rate: "Rate",
     depth: "Depth",
     envelope_view: "ADSR envelope",
-    mod_play_hint: "Each press triggers the full ADSR envelope"
+    mod_play_hint: "Simulates pressing a key: while held, Attack-Decay-Sustain plays; on release, Release is applied",
+    hold_to_play: "Hold to play",
+    playing_note: "Playing…"
   }
 };
 
