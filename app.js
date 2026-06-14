@@ -133,6 +133,14 @@ function updateOscillatorParams() {
 
 /* ====== Canvas setup con soporte alta densidad ====== */
 function setupCanvas(canvas) {
+  // Fija la altura CSS desde el atributo HTML 'height' la primera vez,
+  // para que el layout no dependa del tamaño interno del canvas
+  // (evita colapso a 0px cuando el módulo está oculto al inicializar).
+  if (!canvas.style.height) {
+    const attrHeight = canvas.getAttribute("height");
+    if (attrHeight) canvas.style.height = attrHeight + "px";
+  }
+
   const dpr = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
   canvas.width = rect.width * dpr;
