@@ -46,7 +46,21 @@ const I18N = {
     envelope_view: "Envolvente ADSR",
     mod_play_hint: "Simula tocar una tecla: al pulsar suena Attack-Decay-Sustain, al soltar se aplica Release",
     hold_to_play: "Mantén pulsado para sonar",
-    playing_note: "Sonando…"
+    playing_note: "Sonando…",
+    section_noise: "Ruido",
+    noise_type: "Tipo de ruido",
+    noise_white: "Blanco",
+    noise_pink: "Rosa",
+    noise_brown: "Marrón",
+    section_sweep: "Barrido de frecuencia (sweep)",
+    sweep_mode: "Modo",
+    sweep_manual: "Manual",
+    sweep_auto: "Automático",
+    sweep_duration: "Duración del barrido",
+    sweep_current_freq: "Frecuencia actual del barrido",
+    section_hearing_test: "Test de rango auditivo",
+    hearing_test_hint: "Activa el barrido automático y pulsa el botón cuando deje de oírse (o vuelva a oírse) el tono",
+    hearing_mark: "Marcar límite audible"
   },
   eu: {
     app_title: "Soinu Laborategia",
@@ -95,7 +109,21 @@ const I18N = {
     envelope_view: "ADSR ingurunea",
     mod_play_hint: "Tekla bat jotzea simulatzen du: sakatzean Attack-Decay-Sustain entzungo da, askatzean Release aplikatuko da",
     hold_to_play: "Sakatu mantenduta soinua entzuteko",
-    playing_note: "Jotzen…"
+    playing_note: "Jotzen…",
+    section_noise: "Zarata",
+    noise_type: "Zarata mota",
+    noise_white: "Zuria",
+    noise_pink: "Arrosa",
+    noise_brown: "Marroia",
+    section_sweep: "Maiztasun barridoa (sweep)",
+    sweep_mode: "Modua",
+    sweep_manual: "Eskuzkoa",
+    sweep_auto: "Automatikoa",
+    sweep_duration: "Barridoaren iraupena",
+    sweep_current_freq: "Barridoaren uneko maiztasuna",
+    section_hearing_test: "Entzumen tartearen testa",
+    hearing_test_hint: "Aktibatu barrido automatikoa eta sakatu botoia tonua entzuten ez denean (edo berriz entzuten denean)",
+    hearing_mark: "Markatu entzumen muga"
   },
   en: {
     app_title: "Sound Lab",
@@ -144,7 +172,21 @@ const I18N = {
     envelope_view: "ADSR envelope",
     mod_play_hint: "Simulates pressing a key: while held, Attack-Decay-Sustain plays; on release, Release is applied",
     hold_to_play: "Hold to play",
-    playing_note: "Playing…"
+    playing_note: "Playing…",
+    section_noise: "Noise",
+    noise_type: "Noise type",
+    noise_white: "White",
+    noise_pink: "Pink",
+    noise_brown: "Brown",
+    section_sweep: "Frequency sweep",
+    sweep_mode: "Mode",
+    sweep_manual: "Manual",
+    sweep_auto: "Automatic",
+    sweep_duration: "Sweep duration",
+    sweep_current_freq: "Current sweep frequency",
+    section_hearing_test: "Hearing range test",
+    hearing_test_hint: "Turn on the automatic sweep and press the button when the tone stops (or starts) being audible",
+    hearing_mark: "Mark audible limit"
   }
 };
 

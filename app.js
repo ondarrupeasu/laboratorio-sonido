@@ -551,6 +551,9 @@ function initControls() {
     if (modIsPlaying) {
       modClearCanvases();
     }
+    if (noiseIsPlaying || sweepIsPlaying) {
+      noiseClearCanvases();
+    }
   });
 
   // Cambio de módulo (tabs)
@@ -582,11 +585,27 @@ function initControls() {
         document.getElementById("mod-play-icon").innerHTML = "&#9658;";
         document.getElementById("mod-play-label").textContent = t("hold_to_play");
       }
+      if (target !== "noise") {
+        if (noiseIsPlaying) {
+          noiseStopTone();
+          document.getElementById("noise-play-btn").classList.remove("playing");
+          document.getElementById("noise-play-icon").innerHTML = "&#9658;";
+          document.getElementById("noise-play-label").textContent = t("generate");
+        }
+        if (sweepIsPlaying) {
+          sweepStopTone();
+          document.getElementById("sweep-play-btn").classList.remove("playing");
+          document.getElementById("sweep-play-icon").innerHTML = "&#9658;";
+          document.getElementById("sweep-play-label").textContent = t("generate");
+        }
+      }
 
       if (target === "dual") {
         setTimeout(() => dualClearCanvases(), 50);
       } else if (target === "modulation") {
         setTimeout(() => modClearCanvases(), 50);
+      } else if (target === "noise") {
+        setTimeout(() => noiseClearCanvases(), 50);
       } else if (target === "generator" && !isPlaying) {
         setTimeout(() => clearCanvases(), 50);
       }
@@ -1350,3 +1369,430 @@ function modInit() {
 }
 
 document.addEventListener("DOMContentLoaded", modInit);
+
+/* ====================================================== */
+/* ====== MÓDULO: RUIDO Y BARRIDOS ====================== */
+/* ====================================================== */
+
+let noiseAudioCtx = null;
+let noiseSource = null;
+let noiseGain = null;
+let noiseAnalyserTime = null;
+let noiseAnalyserFreq = null;
+let noiseIsPlaying = false;
+
+let sweepOsc = null;
+let sweepGain = null;
+let sweepAnalyserTime = null;
+let sweepAnalyserFreq = null;
+let sweepIsPlaying = false;
+let sweepRafId = null;
+let sweepStartTime = 0;
+
+const noiseState = {
+  type: "white",
+  amplitude: 30
+};
+
+const sweepState = {
+  mode: "manual",
+  frequency: 440,
+  duration: 10,
+  amplitude: 30
+};
+
+const hearingMarks = [];
+
+function noiseEnsureAudioContext() {
+  if (!noiseAudioCtx) {
+    noiseAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (noiseAudioCtx.state === "suspended") {
+    noiseAudioCtx.resume();
+  }
+}
+
+/* ====== Generación de buffers de ruido ====== */
+function createNoiseBuffer(type) {
+  const bufferSize = noiseAudioCtx.sampleRate * 2; // 2 segundos, en loop
+  const buffer = noiseAudioCtx.createBuffer(1, bufferSize, noiseAudioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+
+  if (type === "white") {
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+  } else if (type === "pink") {
+    // Algoritmo de Paul Kellet (aproximacion habitual de ruido rosa)
+    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    for (let i = 0; i < bufferSize; i++) {
+      const white = Math.random() * 2 - 1;
+      b0 = 0.99886 * b0 + white * 0.0555179;
+      b1 = 0.99332 * b1 + white * 0.0750759;
+      b2 = 0.96900 * b2 + white * 0.1538520;
+      b3 = 0.86650 * b3 + white * 0.3104856;
+      b4 = 0.55000 * b4 + white * 0.5329522;
+      b5 = -0.7616 * b5 - white * 0.0168980;
+      const pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+      b6 = white * 0.115926;
+      data[i] = pink * 0.11;
+    }
+  } else if (type === "brown") {
+    // Paseo aleatorio (integracion de ruido blanco), normalizado
+    let last = 0;
+    for (let i = 0; i < bufferSize; i++) {
+      const white = Math.random() * 2 - 1;
+      last = (last + white * 0.02);
+      last = Math.max(-1, Math.min(1, last));
+      data[i] = last * 3.5; // compensa la baja amplitud tipica del paseo aleatorio
+    }
+    // re-normaliza por si supera el rango
+    let max = 0;
+    for (let i = 0; i < bufferSize; i++) max = Math.max(max, Math.abs(data[i]));
+    if (max > 1) for (let i = 0; i < bufferSize; i++) data[i] /= max;
+  }
+
+  return buffer;
+}
+
+function noiseStartTone() {
+  noiseEnsureAudioContext();
+
+  noiseSource = noiseAudioCtx.createBufferSource();
+  noiseGain = noiseAudioCtx.createGain();
+  noiseAnalyserTime = noiseAudioCtx.createAnalyser();
+  noiseAnalyserFreq = noiseAudioCtx.createAnalyser();
+
+  noiseAnalyserTime.fftSize = 2048;
+  noiseAnalyserFreq.fftSize = 2048;
+
+  noiseSource.buffer = createNoiseBuffer(noiseState.type);
+  noiseSource.loop = true;
+  noiseGain.gain.value = noiseState.amplitude / 100;
+
+  noiseSource.connect(noiseGain);
+  noiseGain.connect(noiseAnalyserTime);
+  noiseGain.connect(noiseAnalyserFreq);
+  noiseGain.connect(noiseAudioCtx.destination);
+
+  noiseSource.start();
+  noiseIsPlaying = true;
+  noiseStartVisualLoop();
+}
+
+function noiseStopTone() {
+  if (noiseSource) {
+    try { noiseSource.stop(); } catch (e) {}
+    noiseSource.disconnect();
+    noiseGain.disconnect();
+    noiseSource = null;
+  }
+  noiseIsPlaying = false;
+  if (!sweepIsPlaying && noiseRafId) {
+    cancelAnimationFrame(noiseRafId);
+    noiseRafId = null;
+  }
+  if (!sweepIsPlaying) noiseClearCanvases();
+}
+
+let noiseRafId = null;
+
+/* ====== Sweep (barrido de frecuencia) ====== */
+function sweepStartTone() {
+  noiseEnsureAudioContext();
+
+  sweepOsc = noiseAudioCtx.createOscillator();
+  sweepGain = noiseAudioCtx.createGain();
+  sweepAnalyserTime = noiseAudioCtx.createAnalyser();
+  sweepAnalyserFreq = noiseAudioCtx.createAnalyser();
+
+  sweepAnalyserTime.fftSize = 2048;
+  sweepAnalyserFreq.fftSize = 2048;
+
+  sweepOsc.type = "sine";
+  sweepGain.gain.value = sweepState.amplitude / 100;
+
+  sweepOsc.connect(sweepGain);
+  sweepGain.connect(sweepAnalyserTime);
+  sweepGain.connect(sweepAnalyserFreq);
+  sweepGain.connect(noiseAudioCtx.destination);
+
+  const now = noiseAudioCtx.currentTime;
+
+  if (sweepState.mode === "auto") {
+    sweepOsc.frequency.setValueAtTime(FREQ_MIN, now);
+    sweepOsc.frequency.exponentialRampToValueAtTime(FREQ_MAX, now + sweepState.duration);
+    sweepStartTime = now;
+  } else {
+    sweepOsc.frequency.setValueAtTime(sweepState.frequency, now);
+  }
+
+  sweepOsc.start(now);
+  sweepIsPlaying = true;
+  noiseStartVisualLoop();
+}
+
+function sweepStopTone() {
+  if (sweepOsc) {
+    try { sweepOsc.stop(); } catch (e) {}
+    sweepOsc.disconnect();
+    sweepGain.disconnect();
+    sweepOsc = null;
+  }
+  sweepIsPlaying = false;
+  if (!noiseIsPlaying && noiseRafId) {
+    cancelAnimationFrame(noiseRafId);
+    noiseRafId = null;
+  }
+  if (!noiseIsPlaying) noiseClearCanvases();
+}
+
+/* ====== Visualización ====== */
+function noiseClearCanvases() {
+  ["noise-oscilloscope", "noise-spectrum"].forEach(id => {
+    const canvas = document.getElementById(id);
+    const { ctx, width, height } = setupCanvas(canvas);
+    ctx.clearRect(0, 0, width, height);
+    drawGrid(ctx, width, height);
+  });
+  sweepRedrawPosition();
+}
+
+function noiseStartVisualLoop() {
+  const oscCanvas = document.getElementById("noise-oscilloscope");
+  const fftCanvas = document.getElementById("noise-spectrum");
+
+  const oscSetup = setupCanvas(oscCanvas);
+  const fftSetup = setupCanvas(fftCanvas);
+
+  function draw() {
+    if (!noiseIsPlaying && !sweepIsPlaying) return;
+
+    // Osciloscopio: usa la fuente activa (ruido o sweep); si ambas, prioriza sweep
+    const timeAnalyser = sweepIsPlaying ? sweepAnalyserTime : noiseAnalyserTime;
+    const freqAnalyser = sweepIsPlaying ? sweepAnalyserFreq : noiseAnalyserFreq;
+
+    const timeData = new Uint8Array(timeAnalyser.fftSize);
+    const freqData = new Uint8Array(freqAnalyser.frequencyBinCount);
+
+    timeAnalyser.getByteTimeDomainData(timeData);
+    drawOscilloscope(oscSetup.ctx, oscSetup.width, oscSetup.height, timeData);
+
+    freqAnalyser.getByteFrequencyData(freqData);
+    drawSpectrum(fftSetup.ctx, fftSetup.width, fftSetup.height, freqData);
+
+    if (sweepIsPlaying) sweepUpdatePosition();
+
+    noiseRafId = requestAnimationFrame(draw);
+  }
+
+  draw();
+}
+
+// Dibuja la barra de posición logarítmica con marcador de frecuencia actual
+function sweepRedrawPosition() {
+  const canvas = document.getElementById("sweep-position");
+  const { ctx, width, height } = setupCanvas(canvas);
+  ctx.clearRect(0, 0, width, height);
+
+  // pista de fondo
+  ctx.fillStyle = getCssVar("--track-bg");
+  ctx.fillRect(0, height / 2 - 2, width, 4);
+
+  const freq = sweepCurrentFrequency();
+  const ratio = freqToSlider(freq) / 1000; // 0..1
+  const x = ratio * width;
+
+  ctx.fillStyle = getCssVar("--wave-color");
+  ctx.beginPath();
+  ctx.arc(x, height / 2, 8, 0, Math.PI * 2);
+  ctx.fill();
+
+  document.getElementById("sweep-current-reading").textContent =
+    freq >= 1000 ? (freq / 1000).toFixed(2) + "k Hz" : Math.round(freq) + " Hz";
+}
+
+function sweepCurrentFrequency() {
+  if (!sweepIsPlaying) return sweepState.frequency;
+  if (sweepState.mode === "manual") return sweepState.frequency;
+
+  const elapsed = noiseAudioCtx.currentTime - sweepStartTime;
+  const progress = Math.min(1, elapsed / sweepState.duration);
+  return FREQ_MIN * Math.pow(FREQ_MAX / FREQ_MIN, progress);
+}
+
+function sweepUpdatePosition() {
+  sweepRedrawPosition();
+  // Al terminar el barrido automatico, se detiene solo
+  if (sweepState.mode === "auto") {
+    const elapsed = noiseAudioCtx.currentTime - sweepStartTime;
+    if (elapsed >= sweepState.duration) {
+      sweepStopTone();
+      document.getElementById("sweep-play-btn").classList.remove("playing");
+      document.getElementById("sweep-play-icon").innerHTML = "&#9658;";
+      document.getElementById("sweep-play-label").textContent = t("generate");
+    }
+  }
+}
+
+/* ====== UI: displays ====== */
+function noiseUpdateAmpDisplay() {
+  document.getElementById("noise-amp-value").textContent = noiseState.amplitude;
+}
+
+function sweepUpdateFreqDisplay() {
+  const freq = sweepState.frequency;
+  document.getElementById("sweep-freq-value").textContent =
+    freq >= 1000 ? (freq / 1000).toFixed(2) + "k" : Math.round(freq);
+
+  const note = freqToNote(freq);
+  const solfege = NOTE_SOLFEGE[note.name] || "";
+  document.getElementById("sweep-note").textContent = `${note.name}${note.octave} — ${solfege}`;
+
+  if (sweepOsc && sweepState.mode === "manual") {
+    sweepOsc.frequency.setValueAtTime(sweepState.frequency, noiseAudioCtx.currentTime);
+  }
+  sweepRedrawPosition();
+}
+
+function sweepUpdateAmpDisplay() {
+  document.getElementById("sweep-amp-value").textContent = sweepState.amplitude;
+}
+
+function sweepUpdateDurationDisplay() {
+  document.getElementById("sweep-duration-value").textContent = sweepState.duration;
+}
+
+/* ====== Test de rango auditivo ====== */
+function renderHearingMarks() {
+  const container = document.getElementById("hearing-test-marks");
+  container.innerHTML = "";
+  hearingMarks.forEach((freq, idx) => {
+    const pill = document.createElement("div");
+    pill.className = "hearing-mark-pill";
+    const label = freq >= 1000 ? (freq / 1000).toFixed(2) + " kHz" : Math.round(freq) + " Hz";
+    pill.innerHTML = `<span>${label}</span>`;
+    const removeBtn = document.createElement("button");
+    removeBtn.innerHTML = "&times;";
+    removeBtn.setAttribute("aria-label", "remove");
+    removeBtn.addEventListener("click", () => {
+      hearingMarks.splice(idx, 1);
+      renderHearingMarks();
+    });
+    pill.appendChild(removeBtn);
+    container.appendChild(pill);
+  });
+}
+
+/* ====== Listeners del módulo ====== */
+function initNoiseControls() {
+  // Tipo de ruido
+  document.querySelectorAll("#noise-type-grid .wave-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#noise-type-grid .wave-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      noiseState.type = btn.dataset.noise;
+      if (noiseIsPlaying) {
+        // Recrea la fuente con el nuevo tipo de ruido
+        noiseStopTone();
+        noiseStartTone();
+      }
+    });
+  });
+
+  // Amplitud ruido (en vivo)
+  const noiseAmpSlider = document.getElementById("noise-amp-slider");
+  noiseAmpSlider.addEventListener("input", () => {
+    noiseState.amplitude = parseFloat(noiseAmpSlider.value);
+    noiseUpdateAmpDisplay();
+    if (noiseGain) noiseGain.gain.setValueAtTime(noiseState.amplitude / 100, noiseAudioCtx.currentTime);
+  });
+
+  // Play/Stop ruido
+  const noisePlayBtn = document.getElementById("noise-play-btn");
+  noisePlayBtn.addEventListener("click", () => {
+    if (!noiseIsPlaying) {
+      noiseStartTone();
+      noisePlayBtn.classList.add("playing");
+      document.getElementById("noise-play-icon").innerHTML = "&#9632;";
+      document.getElementById("noise-play-label").textContent = t("stop");
+    } else {
+      noiseStopTone();
+      noisePlayBtn.classList.remove("playing");
+      document.getElementById("noise-play-icon").innerHTML = "&#9658;";
+      document.getElementById("noise-play-label").textContent = t("generate");
+    }
+  });
+
+  // Modo de barrido
+  document.querySelectorAll("#sweep-mode-grid .wave-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#sweep-mode-grid .wave-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      sweepState.mode = btn.dataset.sweepMode;
+      document.getElementById("sweep-manual-row").hidden = sweepState.mode !== "manual";
+      document.getElementById("sweep-duration-row").hidden = sweepState.mode !== "auto";
+    });
+  });
+
+  // Frecuencia manual
+  const sweepFreqSlider = document.getElementById("sweep-freq-slider");
+  sweepFreqSlider.addEventListener("input", () => {
+    sweepState.frequency = sliderToFreq(parseFloat(sweepFreqSlider.value));
+    sweepUpdateFreqDisplay();
+  });
+
+  // Duracion del barrido automatico
+  const sweepDurationSlider = document.getElementById("sweep-duration-slider");
+  sweepDurationSlider.addEventListener("input", () => {
+    sweepState.duration = parseFloat(sweepDurationSlider.value);
+    sweepUpdateDurationDisplay();
+  });
+
+  // Amplitud sweep (en vivo)
+  const sweepAmpSlider = document.getElementById("sweep-amp-slider");
+  sweepAmpSlider.addEventListener("input", () => {
+    sweepState.amplitude = parseFloat(sweepAmpSlider.value);
+    sweepUpdateAmpDisplay();
+    if (sweepGain) sweepGain.gain.setValueAtTime(sweepState.amplitude / 100, noiseAudioCtx.currentTime);
+  });
+
+  // Play/Stop sweep
+  const sweepPlayBtn = document.getElementById("sweep-play-btn");
+  sweepPlayBtn.addEventListener("click", () => {
+    if (!sweepIsPlaying) {
+      sweepStartTone();
+      sweepPlayBtn.classList.add("playing");
+      document.getElementById("sweep-play-icon").innerHTML = "&#9632;";
+      document.getElementById("sweep-play-label").textContent = t("stop");
+    } else {
+      sweepStopTone();
+      sweepPlayBtn.classList.remove("playing");
+      document.getElementById("sweep-play-icon").innerHTML = "&#9658;";
+      document.getElementById("sweep-play-label").textContent = t("generate");
+    }
+  });
+
+  // Marcar limite audible
+  document.getElementById("hearing-mark-btn").addEventListener("click", () => {
+    const freq = Math.round(sweepCurrentFrequency());
+    hearingMarks.push(freq);
+    renderHearingMarks();
+  });
+}
+
+/* ====== Init del módulo Ruido y barridos ====== */
+function noiseInit() {
+  initNoiseControls();
+
+  noiseUpdateAmpDisplay();
+
+  document.getElementById("sweep-freq-slider").value = Math.round(freqToSlider(440));
+  sweepUpdateFreqDisplay();
+  sweepUpdateAmpDisplay();
+  sweepUpdateDurationDisplay();
+
+  setTimeout(() => noiseClearCanvases(), 50);
+}
+
+document.addEventListener("DOMContentLoaded", noiseInit);

@@ -697,6 +697,57 @@
   .toggle-switch input:checked + .toggle-slider::before {
     transform: translateX(18px);
   }
+
+  /* Modulo Ruido y barridos */
+  #sweep-position {
+    height: 40px;
+  }
+
+  .hearing-test-card {
+    text-align: center;
+  }
+
+  .hearing-test-card .sub-hint {
+    margin-bottom: 12px;
+  }
+
+  .hearing-test-marks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+    margin-bottom: 10px;
+    min-height: 28px;
+  }
+
+  .hearing-test-marks:empty::after {
+    content: "—";
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+
+  .hearing-mark-pill {
+    background: var(--track-bg);
+    border-radius: 14px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-weight: 600;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .hearing-mark-pill button {
+    border: none;
+    background: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0;
+  }
 </style>
 </head>
 <body data-theme="light">
@@ -720,7 +771,7 @@
     <button class="module-tab active" data-module="generator" data-i18n="tab_generator">Generador</button>
     <button class="module-tab" data-module="modulation" data-i18n="tab_modulation">Modulación</button>
     <button class="module-tab" data-module="dual" data-i18n="tab_dual">Dos osciladores</button>
-    <button class="module-tab disabled" data-i18n="tab_noise">Ruido y barridos</button>
+    <button class="module-tab" data-module="noise" data-i18n="tab_noise">Ruido y barridos</button>
     <button class="module-tab disabled" data-i18n="tab_filters">Filtros</button>
     <button class="module-tab disabled" data-i18n="tab_sampling">Muestreo</button>
     <button class="module-tab disabled" data-i18n="tab_stereo">Estéreo</button>
@@ -1165,6 +1216,136 @@
               <span class="reading" id="mod-fft-reading">20 Hz – 20 kHz</span>
             </div>
             <canvas id="mod-spectrum" height="160"></canvas>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <div class="module-view" id="module-noise" hidden>
+    <div class="main-grid">
+
+      <!-- LEFT: Controls -->
+      <div class="controls-col">
+
+        <div class="card">
+          <h2 data-i18n="section_noise">Ruido</h2>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="noise_type">Tipo de ruido</label>
+            </div>
+            <div class="waveform-grid" id="noise-type-grid">
+              <button class="wave-btn active" data-noise="white">
+                <span data-i18n="noise_white">Blanco</span>
+              </button>
+              <button class="wave-btn" data-noise="pink">
+                <span data-i18n="noise_pink">Rosa</span>
+              </button>
+              <button class="wave-btn" data-noise="brown">
+                <span data-i18n="noise_brown">Marrón</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="amplitude">Amplitud</label>
+              <span class="value"><span id="noise-amp-value">30</span>%</span>
+            </div>
+            <input type="range" id="noise-amp-slider" min="0" max="100" value="30" step="1">
+          </div>
+
+          <button class="play-btn" id="noise-play-btn">
+            <span id="noise-play-icon">&#9658;</span>
+            <span id="noise-play-label" data-i18n="generate">Generar tono</span>
+          </button>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="section_sweep">Barrido de frecuencia (sweep)</h2>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="sweep_mode">Modo</label>
+            </div>
+            <div class="waveform-grid" id="sweep-mode-grid">
+              <button class="wave-btn active" data-sweep-mode="manual">
+                <span data-i18n="sweep_manual">Manual</span>
+              </button>
+              <button class="wave-btn" data-sweep-mode="auto">
+                <span data-i18n="sweep_auto">Automático</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="control-row" id="sweep-manual-row">
+            <div class="label-row">
+              <label data-i18n="frequency">Frecuencia</label>
+              <span class="value"><span id="sweep-freq-value">440</span> Hz<span class="sub-value" id="sweep-note">A4 — La</span></span>
+            </div>
+            <input type="range" id="sweep-freq-slider" min="0" max="1000" value="447" step="1">
+          </div>
+
+          <div class="control-row" id="sweep-duration-row" hidden>
+            <div class="label-row">
+              <label data-i18n="sweep_duration">Duración del barrido</label>
+              <span class="value"><span id="sweep-duration-value">10</span> s</span>
+            </div>
+            <input type="range" id="sweep-duration-slider" min="3" max="60" value="10" step="1">
+          </div>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="amplitude">Amplitud</label>
+              <span class="value"><span id="sweep-amp-value">30</span>%</span>
+            </div>
+            <input type="range" id="sweep-amp-slider" min="0" max="100" value="30" step="1">
+          </div>
+
+          <button class="play-btn" id="sweep-play-btn">
+            <span id="sweep-play-icon">&#9658;</span>
+            <span id="sweep-play-label" data-i18n="generate">Generar tono</span>
+          </button>
+        </div>
+
+        <div class="card hearing-test-card">
+          <h2 data-i18n="section_hearing_test">Test de rango auditivo</h2>
+          <p class="sub-hint" data-i18n="hearing_test_hint">Activa el barrido automático y pulsa el botón cuando deje de oírse (o vuelva a oírse) el tono</p>
+          <div class="hearing-test-marks" id="hearing-test-marks"></div>
+          <button class="beat-preset-btn" id="hearing-mark-btn" data-i18n="hearing_mark">Marcar límite audible</button>
+        </div>
+
+      </div>
+
+      <!-- RIGHT: Visualizers -->
+      <div class="viz-col">
+
+        <div class="card viz-card">
+          <div class="viz-block">
+            <div class="viz-label">
+              <span data-i18n="sweep_current_freq">Frecuencia actual del barrido</span>
+              <span class="reading" id="sweep-current-reading">440 Hz</span>
+            </div>
+            <canvas id="sweep-position" height="40"></canvas>
+          </div>
+
+          <div class="viz-block">
+            <div class="viz-label">
+              <span data-i18n="oscilloscope">Osciloscopio (dominio del tiempo)</span>
+              <span class="reading" id="noise-osc-reading">20 ms / div</span>
+            </div>
+            <canvas id="noise-oscilloscope" height="160"></canvas>
+          </div>
+
+          <div class="viz-block">
+            <div class="viz-label">
+              <span data-i18n="spectrum">Analizador de espectro (FFT)</span>
+              <span class="reading" id="noise-fft-reading">20 Hz – 20 kHz</span>
+            </div>
+            <canvas id="noise-spectrum" height="160"></canvas>
           </div>
         </div>
 
