@@ -757,8 +757,8 @@
     <h1 id="app-title">Laboratorio de Sonido</h1>
     <div class="topbar-controls">
       <div class="segmented" id="lang-switch">
-        <button data-lang="es" class="active">ES</button>
         <button data-lang="eu">EU</button>
+        <button data-lang="es" class="active">ES</button>
         <button data-lang="en">EN</button>
       </div>
       <button class="icon-btn" id="theme-toggle" aria-label="Cambiar tema">
@@ -772,9 +772,9 @@
     <button class="module-tab" data-module="modulation" data-i18n="tab_modulation">Modulación</button>
     <button class="module-tab" data-module="dual" data-i18n="tab_dual">Dos osciladores</button>
     <button class="module-tab" data-module="noise" data-i18n="tab_noise">Ruido y barridos</button>
-    <button class="module-tab disabled" data-i18n="tab_filters">Filtros</button>
-    <button class="module-tab disabled" data-i18n="tab_sampling">Muestreo</button>
-    <button class="module-tab disabled" data-i18n="tab_stereo">Estéreo</button>
+    <button class="module-tab" data-module="filters" data-i18n="tab_filters">Filtros</button>
+    <button class="module-tab" data-module="sampling" data-i18n="tab_sampling">Muestreo</button>
+    <button class="module-tab" data-module="stereo" data-i18n="tab_stereo">Estéreo</button>
   </div>
 
   <div class="module-view" id="module-generator">
@@ -1346,6 +1346,339 @@
               <span class="reading" id="noise-fft-reading">20 Hz – 20 kHz</span>
             </div>
             <canvas id="noise-spectrum" height="160"></canvas>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <div class="module-view" id="module-filters" hidden>
+    <div class="main-grid">
+
+      <!-- LEFT: Controls -->
+      <div class="controls-col">
+
+        <div class="card">
+          <button class="play-btn" id="filter-play-btn">
+            <span id="filter-play-icon">&#9658;</span>
+            <span id="filter-play-label" data-i18n="generate">Generar tono</span>
+          </button>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="section_source">Fuente de la señal</h2>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="source_type">Tipo de fuente</label>
+            </div>
+            <div class="waveform-grid" id="filter-source-grid">
+              <button class="wave-btn active" data-source="sawtooth">
+                <span data-i18n="source_tone">Tono (sierra)</span>
+              </button>
+              <button class="wave-btn" data-source="white">
+                <span data-i18n="noise_white">Ruido blanco</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="control-row" id="filter-freq-row">
+            <div class="label-row">
+              <label data-i18n="frequency">Frecuencia</label>
+              <span class="value"><span id="filter-tone-freq-value">220</span> Hz<span class="sub-value" id="filter-tone-note">A3 — La</span></span>
+            </div>
+            <input type="range" id="filter-tone-freq-slider" min="0" max="1000" value="333" step="1">
+          </div>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="amplitude">Amplitud</label>
+              <span class="value"><span id="filter-amp-value">30</span>%</span>
+            </div>
+            <input type="range" id="filter-amp-slider" min="0" max="100" value="30" step="1">
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="section_filter">Filtro</h2>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="filter_type">Tipo de filtro</label>
+            </div>
+            <div class="waveform-grid" id="filter-type-grid">
+              <button class="wave-btn active" data-filter="lowpass">
+                <span data-i18n="filter_lowpass">Paso bajo</span>
+              </button>
+              <button class="wave-btn" data-filter="highpass">
+                <span data-i18n="filter_highpass">Paso alto</span>
+              </button>
+              <button class="wave-btn" data-filter="bandpass">
+                <span data-i18n="filter_bandpass">Paso banda</span>
+              </button>
+              <button class="wave-btn" data-filter="notch">
+                <span data-i18n="filter_notch">Notch</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="cutoff_frequency">Frecuencia de corte</label>
+              <span class="value"><span id="filter-cutoff-value">1000</span> Hz</span>
+            </div>
+            <input type="range" id="filter-cutoff-slider" min="0" max="1000" value="675" step="1">
+          </div>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="resonance">Resonancia (Q)</label>
+              <span class="value"><span id="filter-q-value">1.0</span></span>
+            </div>
+            <input type="range" id="filter-q-slider" min="1" max="200" value="10" step="1">
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT: Visualizers -->
+      <div class="viz-col">
+
+        <div class="card viz-card">
+          <div class="viz-block">
+            <div class="viz-label">
+              <span data-i18n="oscilloscope">Osciloscopio (dominio del tiempo)</span>
+              <span class="reading" id="filter-osc-reading">20 ms / div</span>
+            </div>
+            <canvas id="filter-oscilloscope" height="160"></canvas>
+          </div>
+
+          <div class="viz-block">
+            <div class="viz-label">
+              <span data-i18n="spectrum_with_response">Espectro + respuesta del filtro</span>
+              <span class="reading" id="filter-fft-reading">20 Hz – 20 kHz</span>
+            </div>
+            <canvas id="filter-spectrum" height="180"></canvas>
+            <div class="legend">
+              <span class="legend-item"><span class="legend-dot" style="background:var(--fft-color)"></span><span data-i18n="legend_signal">Señal</span></span>
+              <span class="legend-item"><span class="legend-dot osc-dot-a"></span><span data-i18n="legend_filter_response">Respuesta del filtro</span></span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <div class="module-view" id="module-sampling" hidden>
+    <div class="main-grid">
+
+      <!-- LEFT: Controls -->
+      <div class="controls-col">
+
+        <div class="card">
+          <button class="play-btn" id="sampling-play-btn">
+            <span id="sampling-play-icon">&#9658;</span>
+            <span id="sampling-play-label" data-i18n="generate">Generar tono</span>
+          </button>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="section_oscillator">Oscilador</h2>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="frequency">Frecuencia</label>
+              <span class="value"><span id="sampling-freq-value">440</span> Hz<span class="sub-value" id="sampling-note">A4 — La</span></span>
+            </div>
+            <input type="range" id="sampling-freq-slider" min="0" max="1000" value="447" step="1">
+          </div>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="amplitude">Amplitud</label>
+              <span class="value"><span id="sampling-amp-value">40</span>%</span>
+            </div>
+            <input type="range" id="sampling-amp-slider" min="0" max="100" value="40" step="1">
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="section_sampling">Muestreo y cuantización</h2>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="sample_rate">Frecuencia de muestreo</label>
+              <span class="value"><span id="sample-rate-value">8000</span> Hz</span>
+            </div>
+            <input type="range" id="sample-rate-slider" min="500" max="48000" value="8000" step="100">
+          </div>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="bit_depth">Profundidad de bits</label>
+              <span class="value"><span id="bit-depth-value">8</span> bits<span class="sub-value" id="bit-depth-levels">256 niveles</span></span>
+            </div>
+            <input type="range" id="bit-depth-slider" min="1" max="16" value="8" step="1">
+          </div>
+
+          <div class="sub-hint" id="nyquist-hint" data-i18n="nyquist_hint">Frecuencia de Nyquist: 4000 Hz (mitad de la frecuencia de muestreo)</div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT: Visualizers -->
+      <div class="viz-col">
+
+        <div class="card viz-card">
+          <div class="viz-block">
+            <div class="viz-label">
+              <span data-i18n="original_vs_sampled">Señal original vs muestreada/cuantizada</span>
+              <span class="reading" id="sampling-osc-reading">20 ms / div</span>
+            </div>
+            <canvas id="sampling-oscilloscope" height="180"></canvas>
+            <div class="legend">
+              <span class="legend-item"><span class="legend-dot osc-dot-a"></span><span data-i18n="legend_original">Original</span></span>
+              <span class="legend-item"><span class="legend-dot" style="background:var(--accent2)"></span><span data-i18n="legend_sampled">Muestreada/cuantizada</span></span>
+            </div>
+          </div>
+
+          <div class="viz-block">
+            <div class="viz-label">
+              <span data-i18n="spectrum">Analizador de espectro (FFT)</span>
+              <span class="reading" id="sampling-fft-reading">20 Hz – 20 kHz</span>
+            </div>
+            <canvas id="sampling-spectrum" height="160"></canvas>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <div class="module-view" id="module-stereo" hidden>
+    <div class="main-grid">
+
+      <!-- LEFT: Controls -->
+      <div class="controls-col">
+
+        <div class="card">
+          <button class="play-btn" id="stereo-play-btn">
+            <span id="stereo-play-icon">&#9658;</span>
+            <span id="stereo-play-label" data-i18n="generate">Generar tono</span>
+          </button>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="section_oscillator">Oscilador</h2>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="waveform">Forma de onda</label>
+            </div>
+            <div class="waveform-grid" id="stereo-waveform-grid">
+              <button class="wave-btn active" data-wave="sine">
+                <svg viewBox="0 0 28 18"><path d="M0 9 C 3 0, 4 0, 7 9 C 10 18, 11 18, 14 9 C 17 0, 18 0, 21 9 C 24 18, 25 18, 28 9" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                <span data-i18n="wave_sine">Senoidal</span>
+              </button>
+              <button class="wave-btn" data-wave="square">
+                <svg viewBox="0 0 28 18"><path d="M0 14 L0 2 L14 2 L14 16 L28 16 L28 4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                <span data-i18n="wave_square">Cuadrada</span>
+              </button>
+              <button class="wave-btn" data-wave="triangle">
+                <svg viewBox="0 0 28 18"><path d="M0 14 L7 2 L21 16 L28 4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                <span data-i18n="wave_triangle">Triangular</span>
+              </button>
+              <button class="wave-btn" data-wave="sawtooth">
+                <svg viewBox="0 0 28 18"><path d="M0 16 L9 2 L9 16 L18 2 L18 16 L27 2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                <span data-i18n="wave_sawtooth">Sierra</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="frequency">Frecuencia</label>
+              <span class="value"><span id="stereo-freq-value">440</span> Hz<span class="sub-value" id="stereo-note">A4 — La</span></span>
+            </div>
+            <input type="range" id="stereo-freq-slider" min="0" max="1000" value="447" step="1">
+          </div>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="amplitude">Amplitud</label>
+              <span class="value"><span id="stereo-amp-value">40</span>%</span>
+            </div>
+            <input type="range" id="stereo-amp-slider" min="0" max="100" value="40" step="1">
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="section_stereo_field">Campo estéreo</h2>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="pan">Paneo (L-R)</label>
+              <span class="value"><span id="stereo-pan-value">0</span></span>
+            </div>
+            <div class="slider-zero-wrap">
+              <input type="range" id="stereo-pan-slider" min="-100" max="100" value="0" step="1">
+              <span class="zero-mark"></span>
+            </div>
+          </div>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="haas_delay">Retardo entre canales (Haas)</label>
+              <span class="value"><span id="stereo-delay-value">0</span> ms</span>
+            </div>
+            <input type="range" id="stereo-delay-slider" min="0" max="40" value="0" step="1">
+          </div>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="delay_channel">Canal retardado</label>
+            </div>
+            <div class="waveform-grid" id="stereo-delay-channel-grid">
+              <button class="wave-btn active" data-channel="right">
+                <span data-i18n="channel_right">Derecho</span>
+              </button>
+              <button class="wave-btn" data-channel="left">
+                <span data-i18n="channel_left">Izquierdo</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="sub-hint" data-i18n="haas_hint">Con retardos de 1-30 ms, el oído sigue percibiendo una sola fuente, desplazada hacia el canal sin retardo (efecto Haas)</div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT: Visualizers -->
+      <div class="viz-col">
+
+        <div class="card viz-card">
+          <div class="viz-block">
+            <div class="viz-label">
+              <span data-i18n="stereo_oscilloscope">Osciloscopio estéreo (L / R)</span>
+              <span class="reading" id="stereo-osc-reading">20 ms / div</span>
+            </div>
+            <canvas id="stereo-oscilloscope" height="180"></canvas>
+            <div class="legend">
+              <span class="legend-item"><span class="legend-dot osc-dot-a"></span><span data-i18n="channel_left">Izquierdo</span></span>
+              <span class="legend-item"><span class="legend-dot" style="background:var(--accent2)"></span><span data-i18n="channel_right">Derecho</span></span>
+            </div>
+          </div>
+
+          <div class="viz-block">
+            <div class="viz-label">
+              <span data-i18n="balance_meter">Medidor de balance L/R</span>
+            </div>
+            <canvas id="stereo-balance" height="40"></canvas>
           </div>
         </div>
 
