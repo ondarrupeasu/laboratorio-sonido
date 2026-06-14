@@ -28,7 +28,12 @@ const I18N = {
     footer_text: "Laboratorio de Sonido — CIFP Tartanga LHII",
     pan_left: "Izq",
     pan_center: "Centro",
-    pan_right: "Der"
+    pan_right: "Der",
+    oscillator_a: "Oscilador A",
+    oscillator_b: "Oscilador B",
+    beat_preset: "Preajuste de batido (440 / 444 Hz)",
+    beat_frequency: "Frecuencia de batido",
+    combined_oscilloscope: "Osciloscopio combinado"
   },
   eu: {
     app_title: "Soinu Laborategia",
@@ -59,7 +64,12 @@ const I18N = {
     footer_text: "Soinu Laborategia — CIFP Tartanga LHII",
     pan_left: "Ezk",
     pan_center: "Erdian",
-    pan_right: "Esk"
+    pan_right: "Esk",
+    oscillator_a: "A osziladorea",
+    oscillator_b: "B osziladorea",
+    beat_preset: "Taupada aurrezarpena (440 / 444 Hz)",
+    beat_frequency: "Taupada maiztasuna",
+    combined_oscilloscope: "Osziloskopio konbinatua"
   },
   en: {
     app_title: "Sound Lab",
@@ -90,7 +100,12 @@ const I18N = {
     footer_text: "Sound Lab — CIFP Tartanga LHII",
     pan_left: "L",
     pan_center: "Center",
-    pan_right: "R"
+    pan_right: "R",
+    oscillator_a: "Oscillator A",
+    oscillator_b: "Oscillator B",
+    beat_preset: "Beating preset (440 / 444 Hz)",
+    beat_frequency: "Beat frequency",
+    combined_oscilloscope: "Combined oscilloscope"
   }
 };
 
