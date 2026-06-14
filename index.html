@@ -62,6 +62,9 @@
     margin: 0 auto;
     padding: 16px;
     padding-bottom: 48px;
+    padding-left: max(16px, env(safe-area-inset-left));
+    padding-right: max(16px, env(safe-area-inset-right));
+    padding-top: max(16px, env(safe-area-inset-top));
   }
 
   /* Top bar */
@@ -168,7 +171,12 @@
     .main-grid {
       grid-template-columns: 300px 1fr;
     }
-    .app { padding: 10px; }
+    .app {
+      padding: 10px;
+      padding-left: max(10px, env(safe-area-inset-left));
+      padding-right: max(10px, env(safe-area-inset-right));
+      padding-top: max(10px, env(safe-area-inset-top));
+    }
     .topbar { padding: 4px 4px 10px; }
   }
 
