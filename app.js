@@ -548,6 +548,9 @@ function initControls() {
     if (dualIsPlaying) {
       dualClearCanvases();
     }
+    if (modIsPlaying) {
+      modClearCanvases();
+    }
   });
 
   // Cambio de módulo (tabs)
@@ -573,9 +576,17 @@ function initControls() {
         document.getElementById("dual-play-icon").innerHTML = "&#9658;";
         document.getElementById("dual-play-label").textContent = t("generate");
       }
+      if (target !== "modulation" && modIsPlaying) {
+        modStopTone();
+        document.getElementById("mod-play-btn").classList.remove("playing");
+        document.getElementById("mod-play-icon").innerHTML = "&#9658;";
+        document.getElementById("mod-play-label").textContent = t("generate");
+      }
 
       if (target === "dual") {
         setTimeout(() => dualClearCanvases(), 50);
+      } else if (target === "modulation") {
+        setTimeout(() => modClearCanvases(), 50);
       } else if (target === "generator" && !isPlaying) {
         setTimeout(() => clearCanvases(), 50);
       }
@@ -933,3 +944,393 @@ function dualInit() {
 }
 
 document.addEventListener("DOMContentLoaded", dualInit);
+
+/* ====================================================== */
+/* ====== MÓDULO: MODULACIÓN (ADSR / tremolo / vibrato) === */
+/* ====================================================== */
+
+let modAudioCtx = null;
+let modOsc = null;
+let modAmpGain = null;        // controlado por la envolvente ADSR
+let modTremoloGain = null;    // multiplica la señal (tremolo)
+let modTremoloLFO = null;
+let modTremoloLFOGain = null;
+let modVibratoLFO = null;
+let modVibratoLFOGain = null;
+let modAnalyserTime = null;
+let modAnalyserFreq = null;
+let modIsPlaying = false;
+let modRafId = null;
+let modReleaseTimeout = null;
+
+const modState = {
+  waveform: "sine",
+  frequency: 440,
+  amplitude: 50,
+  adsr: { attack: 0.05, decay: 0.10, sustain: 0.70, release: 0.30 },
+  tremolo: { enabled: false, rate: 5, depth: 50 },
+  vibrato: { enabled: false, rate: 5, depth: 20 }
+};
+
+function modEnsureAudioContext() {
+  if (!modAudioCtx) {
+    modAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (modAudioCtx.state === "suspended") {
+    modAudioCtx.resume();
+  }
+}
+
+function modStartTone() {
+  modEnsureAudioContext();
+  if (modReleaseTimeout) {
+    clearTimeout(modReleaseTimeout);
+    modReleaseTimeout = null;
+  }
+
+  modOsc = modAudioCtx.createOscillator();
+  modAmpGain = modAudioCtx.createGain();
+  modTremoloGain = modAudioCtx.createGain();
+  modAnalyserTime = modAudioCtx.createAnalyser();
+  modAnalyserFreq = modAudioCtx.createAnalyser();
+
+  modAnalyserTime.fftSize = 2048;
+  modAnalyserFreq.fftSize = 2048;
+
+  modOsc.type = modState.waveform;
+  modOsc.frequency.value = modState.frequency;
+
+  const peakGain = modState.amplitude / 100;
+  modAmpGain.gain.value = 0;
+  modTremoloGain.gain.value = 1;
+
+  modOsc.connect(modAmpGain);
+  modAmpGain.connect(modTremoloGain);
+  modTremoloGain.connect(modAnalyserTime);
+  modTremoloGain.connect(modAnalyserFreq);
+  modTremoloGain.connect(modAudioCtx.destination);
+
+  const now = modAudioCtx.currentTime;
+  modOsc.start(now);
+
+  // Envolvente ADSR: Attack -> Decay -> Sustain (mantenido hasta Release)
+  const { attack, decay, sustain } = modState.adsr;
+  modAmpGain.gain.setValueAtTime(0, now);
+  modAmpGain.gain.linearRampToValueAtTime(peakGain, now + attack);
+  modAmpGain.gain.linearRampToValueAtTime(peakGain * sustain, now + attack + decay);
+
+  // Vibrato: LFO sumado a la frecuencia del oscilador principal
+  if (modState.vibrato.enabled) {
+    modVibratoLFO = modAudioCtx.createOscillator();
+    modVibratoLFOGain = modAudioCtx.createGain();
+    modVibratoLFO.type = "sine";
+    modVibratoLFO.frequency.value = modState.vibrato.rate;
+    modVibratoLFOGain.gain.value = modState.vibrato.depth;
+    modVibratoLFO.connect(modVibratoLFOGain);
+    modVibratoLFOGain.connect(modOsc.frequency);
+    modVibratoLFO.start(now);
+  }
+
+  // Tremolo: LFO que modula la ganancia de salida entre (1-depth) y 1
+  if (modState.tremolo.enabled) {
+    modTremoloLFO = modAudioCtx.createOscillator();
+    modTremoloLFOGain = modAudioCtx.createGain();
+    modTremoloLFO.type = "sine";
+    modTremoloLFO.frequency.value = modState.tremolo.rate;
+    const depthRatio = modState.tremolo.depth / 100;
+    // LFO oscila -depth/2 .. +depth/2 alrededor de 0
+    modTremoloLFOGain.gain.value = depthRatio / 2;
+    modTremoloGain.gain.value = 1 - depthRatio / 2;
+    modTremoloLFO.connect(modTremoloLFOGain);
+    modTremoloLFOGain.connect(modTremoloGain.gain);
+    modTremoloLFO.start(now);
+  }
+
+  modIsPlaying = true;
+  modStartVisualLoop();
+}
+
+function modStopTone() {
+  if (!modOsc) return;
+
+  const now = modAudioCtx.currentTime;
+  const { release } = modState.adsr;
+  const currentGain = modAmpGain.gain.value;
+
+  // Aplica Release y luego detiene los nodos
+  modAmpGain.gain.cancelScheduledValues(now);
+  modAmpGain.gain.setValueAtTime(currentGain, now);
+  modAmpGain.gain.linearRampToValueAtTime(0, now + release);
+
+  const oscToStop = modOsc;
+  const vibratoToStop = modVibratoLFO;
+  const tremoloToStop = modTremoloLFO;
+  const nodesToDisconnect = [modAmpGain, modTremoloGain, modVibratoLFOGain, modTremoloLFOGain];
+
+  modReleaseTimeout = setTimeout(() => {
+    try { oscToStop.stop(); } catch (e) {}
+    if (vibratoToStop) try { vibratoToStop.stop(); } catch (e) {}
+    if (tremoloToStop) try { tremoloToStop.stop(); } catch (e) {}
+    nodesToDisconnect.forEach(n => { if (n) try { n.disconnect(); } catch (e) {} });
+    oscToStop.disconnect();
+    modReleaseTimeout = null;
+  }, release * 1000 + 50);
+
+  modOsc = modAmpGain = modTremoloGain = null;
+  modVibratoLFO = modVibratoLFOGain = null;
+  modTremoloLFO = modTremoloLFOGain = null;
+
+  modIsPlaying = false;
+  if (modRafId) {
+    cancelAnimationFrame(modRafId);
+    modRafId = null;
+  }
+  modClearCanvases();
+}
+
+/* ====== Visualización ====== */
+function modClearCanvases() {
+  ["adsr-envelope", "mod-oscilloscope", "mod-spectrum"].forEach(id => {
+    const canvas = document.getElementById(id);
+    const { ctx, width, height } = setupCanvas(canvas);
+    ctx.clearRect(0, 0, width, height);
+    drawGrid(ctx, width, height);
+  });
+  modRedrawEnvelope();
+}
+
+function modStartVisualLoop() {
+  const oscCanvas = document.getElementById("mod-oscilloscope");
+  const fftCanvas = document.getElementById("mod-spectrum");
+
+  const oscSetup = setupCanvas(oscCanvas);
+  const fftSetup = setupCanvas(fftCanvas);
+
+  const timeData = new Uint8Array(modAnalyserTime.fftSize);
+  const freqData = new Uint8Array(modAnalyserFreq.frequencyBinCount);
+
+  function draw() {
+    if (!modIsPlaying) return;
+
+    modAnalyserTime.getByteTimeDomainData(timeData);
+    drawOscilloscope(oscSetup.ctx, oscSetup.width, oscSetup.height, timeData);
+
+    modAnalyserFreq.getByteFrequencyData(freqData);
+    drawSpectrum(fftSetup.ctx, fftSetup.width, fftSetup.height, freqData);
+
+    modRafId = requestAnimationFrame(draw);
+  }
+
+  draw();
+}
+
+// Dibuja la curva ADSR de forma esquemática (Attack-Decay-Sustain-Release)
+// con los tiempos a escala relativa entre si
+function modRedrawEnvelope() {
+  const canvas = document.getElementById("adsr-envelope");
+  const { ctx, width, height } = setupCanvas(canvas);
+  ctx.clearRect(0, 0, width, height);
+  drawGrid(ctx, width, height);
+
+  const { attack, decay, sustain, release } = modState.adsr;
+  const sustainHold = Math.max(attack, decay, release, 0.1); // duracion visual del tramo sustain
+  const total = attack + decay + sustainHold + release;
+
+  const padding = 8;
+  const usableHeight = height - padding * 2;
+  const peakY = padding;
+  const sustainY = padding + usableHeight * (1 - sustain);
+  const baseY = height - padding;
+
+  const xAttack = (attack / total) * width;
+  const xDecay = xAttack + (decay / total) * width;
+  const xSustain = xDecay + (sustainHold / total) * width;
+  const xRelease = width;
+
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = getCssVar("--wave-color");
+  ctx.beginPath();
+  ctx.moveTo(0, baseY);
+  ctx.lineTo(xAttack, peakY);
+  ctx.lineTo(xDecay, sustainY);
+  ctx.lineTo(xSustain, sustainY);
+  ctx.lineTo(xRelease, baseY);
+  ctx.stroke();
+
+  // Marcadores verticales en los puntos de transicion
+  ctx.strokeStyle = getCssVar("--grid-line");
+  ctx.lineWidth = 1;
+  [xAttack, xDecay, xSustain].forEach(x => {
+    ctx.beginPath();
+    ctx.moveTo(x, padding);
+    ctx.lineTo(x, height - padding);
+    ctx.stroke();
+  });
+
+  const totalReal = attack + decay + release;
+  document.getElementById("adsr-total-reading").textContent =
+    `A+D+R = ${totalReal.toFixed(2)} s`;
+}
+
+/* ====== UI: displays ====== */
+function modUpdateFreqDisplay() {
+  const freq = modState.frequency;
+  document.getElementById("mod-freq-value").textContent =
+    freq >= 1000 ? (freq / 1000).toFixed(2) + "k" : Math.round(freq);
+
+  const note = freqToNote(freq);
+  const solfege = NOTE_SOLFEGE[note.name] || "";
+  document.getElementById("mod-note").textContent = `${note.name}${note.octave} — ${solfege}`;
+}
+
+function modUpdateAmpDisplay() {
+  document.getElementById("mod-amp-value").textContent = modState.amplitude;
+}
+
+// sliders ADSR: attack/decay/release usan escala 1-2000/3000 (ms), sustain en %
+function modUpdateAdsrDisplay() {
+  document.getElementById("adsr-attack-value").textContent = modState.adsr.attack.toFixed(2);
+  document.getElementById("adsr-decay-value").textContent = modState.adsr.decay.toFixed(2);
+  document.getElementById("adsr-sustain-value").textContent = Math.round(modState.adsr.sustain * 100);
+  document.getElementById("adsr-release-value").textContent = modState.adsr.release.toFixed(2);
+  modRedrawEnvelope();
+}
+
+function modUpdateTremoloDisplay() {
+  document.getElementById("tremolo-rate-value").textContent = modState.tremolo.rate.toFixed(1);
+  document.getElementById("tremolo-depth-value").textContent = modState.tremolo.depth;
+}
+
+function modUpdateVibratoDisplay() {
+  document.getElementById("vibrato-rate-value").textContent = modState.vibrato.rate.toFixed(1);
+  document.getElementById("vibrato-depth-value").textContent = modState.vibrato.depth;
+}
+
+/* ====== Listeners del módulo ====== */
+function initModControls() {
+  // Forma de onda
+  document.querySelectorAll("#mod-waveform-grid .wave-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll("#mod-waveform-grid .wave-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      modState.waveform = btn.dataset.wave;
+      if (modOsc) modOsc.type = modState.waveform;
+    });
+  });
+
+  // Frecuencia
+  const freqSlider = document.getElementById("mod-freq-slider");
+  freqSlider.addEventListener("input", () => {
+    modState.frequency = sliderToFreq(parseFloat(freqSlider.value));
+    modUpdateFreqDisplay();
+    if (modOsc) modOsc.frequency.setValueAtTime(modState.frequency, modAudioCtx.currentTime);
+  });
+
+  // Amplitud (afecta al pico de la envolvente; no cambia el sonido si ya esta sonando)
+  const ampSlider = document.getElementById("mod-amp-slider");
+  ampSlider.addEventListener("input", () => {
+    modState.amplitude = parseFloat(ampSlider.value);
+    modUpdateAmpDisplay();
+  });
+
+  // ADSR sliders (escala: attack/decay en ms 1-2000 -> 0.001-2.0 s, release 1-3000 -> 0.001-3.0 s)
+  const attackSlider = document.getElementById("adsr-attack-slider");
+  attackSlider.addEventListener("input", () => {
+    modState.adsr.attack = parseFloat(attackSlider.value) / 1000;
+    modUpdateAdsrDisplay();
+  });
+
+  const decaySlider = document.getElementById("adsr-decay-slider");
+  decaySlider.addEventListener("input", () => {
+    modState.adsr.decay = parseFloat(decaySlider.value) / 1000;
+    modUpdateAdsrDisplay();
+  });
+
+  const sustainSlider = document.getElementById("adsr-sustain-slider");
+  sustainSlider.addEventListener("input", () => {
+    modState.adsr.sustain = parseFloat(sustainSlider.value) / 100;
+    modUpdateAdsrDisplay();
+  });
+
+  const releaseSlider = document.getElementById("adsr-release-slider");
+  releaseSlider.addEventListener("input", () => {
+    modState.adsr.release = parseFloat(releaseSlider.value) / 1000;
+    modUpdateAdsrDisplay();
+  });
+
+  // Tremolo
+  const tremoloEnable = document.getElementById("tremolo-enable");
+  tremoloEnable.addEventListener("change", () => {
+    modState.tremolo.enabled = tremoloEnable.checked;
+  });
+
+  const tremoloRate = document.getElementById("tremolo-rate-slider");
+  tremoloRate.addEventListener("input", () => {
+    modState.tremolo.rate = parseFloat(tremoloRate.value) / 10;
+    modUpdateTremoloDisplay();
+    if (modTremoloLFO) modTremoloLFO.frequency.setValueAtTime(modState.tremolo.rate, modAudioCtx.currentTime);
+  });
+
+  const tremoloDepth = document.getElementById("tremolo-depth-slider");
+  tremoloDepth.addEventListener("input", () => {
+    modState.tremolo.depth = parseFloat(tremoloDepth.value);
+    modUpdateTremoloDisplay();
+    if (modTremoloLFOGain) {
+      const depthRatio = modState.tremolo.depth / 100;
+      modTremoloLFOGain.gain.setValueAtTime(depthRatio / 2, modAudioCtx.currentTime);
+      modTremoloGain.gain.setValueAtTime(1 - depthRatio / 2, modAudioCtx.currentTime);
+    }
+  });
+
+  // Vibrato
+  const vibratoEnable = document.getElementById("vibrato-enable");
+  vibratoEnable.addEventListener("change", () => {
+    modState.vibrato.enabled = vibratoEnable.checked;
+  });
+
+  const vibratoRate = document.getElementById("vibrato-rate-slider");
+  vibratoRate.addEventListener("input", () => {
+    modState.vibrato.rate = parseFloat(vibratoRate.value) / 10;
+    modUpdateVibratoDisplay();
+    if (modVibratoLFO) modVibratoLFO.frequency.setValueAtTime(modState.vibrato.rate, modAudioCtx.currentTime);
+  });
+
+  const vibratoDepth = document.getElementById("vibrato-depth-slider");
+  vibratoDepth.addEventListener("input", () => {
+    modState.vibrato.depth = parseFloat(vibratoDepth.value);
+    modUpdateVibratoDisplay();
+    if (modVibratoLFOGain) modVibratoLFOGain.gain.setValueAtTime(modState.vibrato.depth, modAudioCtx.currentTime);
+  });
+
+  // Play/Stop
+  const modPlayBtn = document.getElementById("mod-play-btn");
+  modPlayBtn.addEventListener("click", () => {
+    if (!modIsPlaying) {
+      modStartTone();
+      modPlayBtn.classList.add("playing");
+      document.getElementById("mod-play-icon").innerHTML = "&#9632;";
+      document.getElementById("mod-play-label").textContent = t("stop");
+    } else {
+      modStopTone();
+      modPlayBtn.classList.remove("playing");
+      document.getElementById("mod-play-icon").innerHTML = "&#9658;";
+      document.getElementById("mod-play-label").textContent = t("generate");
+    }
+  });
+}
+
+/* ====== Init del módulo modulación ====== */
+function modInit() {
+  initModControls();
+
+  document.getElementById("mod-freq-slider").value = Math.round(freqToSlider(440));
+  modUpdateFreqDisplay();
+  modUpdateAmpDisplay();
+  modUpdateAdsrDisplay();
+  modUpdateTremoloDisplay();
+  modUpdateVibratoDisplay();
+
+  setTimeout(() => modClearCanvases(), 50);
+}
+
+document.addEventListener("DOMContentLoaded", modInit);

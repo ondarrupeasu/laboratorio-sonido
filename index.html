@@ -637,6 +637,66 @@
     border-radius: 50%;
     display: inline-block;
   }
+
+  /* Modulo Modulacion */
+  .sub-hint {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-align: center;
+    margin-top: 8px;
+  }
+
+  .card h2 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  /* Toggle switch (iOS style) */
+  .toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 26px;
+    flex-shrink: 0;
+  }
+
+  .toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--track-bg);
+    border-radius: 26px;
+    transition: background 0.2s ease;
+  }
+
+  .toggle-slider::before {
+    content: "";
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    left: 2px;
+    bottom: 2px;
+    background: #ffffff;
+    border-radius: 50%;
+    transition: transform 0.2s ease;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+
+  .toggle-switch input:checked + .toggle-slider {
+    background: var(--accent3);
+  }
+
+  .toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(18px);
+  }
 </style>
 </head>
 <body data-theme="light">
@@ -658,7 +718,7 @@
 
   <div class="module-tabs" id="module-tabs">
     <button class="module-tab active" data-module="generator" data-i18n="tab_generator">Generador</button>
-    <button class="module-tab disabled" data-i18n="tab_modulation">Modulación</button>
+    <button class="module-tab" data-module="modulation" data-i18n="tab_modulation">Modulación</button>
     <button class="module-tab" data-module="dual" data-i18n="tab_dual">Dos osciladores</button>
     <button class="module-tab disabled" data-i18n="tab_noise">Ruido y barridos</button>
     <button class="module-tab disabled" data-i18n="tab_filters">Filtros</button>
@@ -935,6 +995,176 @@
               <span class="reading" id="dual-fft-reading">20 Hz – 20 kHz</span>
             </div>
             <canvas id="dual-spectrum" height="160"></canvas>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <div class="module-view" id="module-modulation" hidden>
+    <div class="main-grid">
+
+      <!-- LEFT: Controls -->
+      <div class="controls-col">
+
+        <div class="card">
+          <button class="play-btn" id="mod-play-btn">
+            <span id="mod-play-icon">&#9658;</span>
+            <span id="mod-play-label" data-i18n="generate">Generar tono</span>
+          </button>
+          <div class="sub-hint" data-i18n="mod_play_hint">Cada pulsación dispara la envolvente ADSR completa</div>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="section_oscillator">Oscilador</h2>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="waveform">Forma de onda</label>
+            </div>
+            <div class="waveform-grid" id="mod-waveform-grid">
+              <button class="wave-btn active" data-wave="sine">
+                <svg viewBox="0 0 28 18"><path d="M0 9 C 3 0, 4 0, 7 9 C 10 18, 11 18, 14 9 C 17 0, 18 0, 21 9 C 24 18, 25 18, 28 9" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                <span data-i18n="wave_sine">Senoidal</span>
+              </button>
+              <button class="wave-btn" data-wave="square">
+                <svg viewBox="0 0 28 18"><path d="M0 14 L0 2 L14 2 L14 16 L28 16 L28 4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                <span data-i18n="wave_square">Cuadrada</span>
+              </button>
+              <button class="wave-btn" data-wave="triangle">
+                <svg viewBox="0 0 28 18"><path d="M0 14 L7 2 L21 16 L28 4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                <span data-i18n="wave_triangle">Triangular</span>
+              </button>
+              <button class="wave-btn" data-wave="sawtooth">
+                <svg viewBox="0 0 28 18"><path d="M0 16 L9 2 L9 16 L18 2 L18 16 L27 2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+                <span data-i18n="wave_sawtooth">Sierra</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="frequency">Frecuencia</label>
+              <span class="value"><span id="mod-freq-value">440</span> Hz<span class="sub-value" id="mod-note">A4 — La</span></span>
+            </div>
+            <input type="range" id="mod-freq-slider" min="0" max="1000" value="447" step="1">
+          </div>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="amplitude">Amplitud</label>
+              <span class="value"><span id="mod-amp-value">50</span>%</span>
+            </div>
+            <input type="range" id="mod-amp-slider" min="0" max="100" value="50" step="1">
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 data-i18n="section_adsr">Envolvente ADSR</h2>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="attack">Attack</label>
+              <span class="value"><span id="adsr-attack-value">0.05</span> s</span>
+            </div>
+            <input type="range" id="adsr-attack-slider" min="1" max="2000" value="50" step="1">
+          </div>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="decay">Decay</label>
+              <span class="value"><span id="adsr-decay-value">0.10</span> s</span>
+            </div>
+            <input type="range" id="adsr-decay-slider" min="1" max="2000" value="100" step="1">
+          </div>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="sustain">Sustain</label>
+              <span class="value"><span id="adsr-sustain-value">70</span>%</span>
+            </div>
+            <input type="range" id="adsr-sustain-slider" min="0" max="100" value="70" step="1">
+          </div>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="release">Release</label>
+              <span class="value"><span id="adsr-release-value">0.30</span> s</span>
+            </div>
+            <input type="range" id="adsr-release-slider" min="1" max="3000" value="300" step="1">
+          </div>
+        </div>
+
+        <div class="card">
+          <h2><span data-i18n="section_tremolo">Tremolo (modulación de amplitud)</span><label class="toggle-switch"><input type="checkbox" id="tremolo-enable"><span class="toggle-slider"></span></label></h2>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="rate">Velocidad (rate)</label>
+              <span class="value"><span id="tremolo-rate-value">5.0</span> Hz</span>
+            </div>
+            <input type="range" id="tremolo-rate-slider" min="1" max="200" value="50" step="1">
+          </div>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="depth">Profundidad (depth)</label>
+              <span class="value"><span id="tremolo-depth-value">50</span>%</span>
+            </div>
+            <input type="range" id="tremolo-depth-slider" min="0" max="100" value="50" step="1">
+          </div>
+        </div>
+
+        <div class="card">
+          <h2><span data-i18n="section_vibrato">Vibrato (modulación de frecuencia)</span><label class="toggle-switch"><input type="checkbox" id="vibrato-enable"><span class="toggle-slider"></span></label></h2>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="rate">Velocidad (rate)</label>
+              <span class="value"><span id="vibrato-rate-value">5.0</span> Hz</span>
+            </div>
+            <input type="range" id="vibrato-rate-slider" min="1" max="200" value="50" step="1">
+          </div>
+
+          <div class="control-row">
+            <div class="label-row">
+              <label data-i18n="depth">Profundidad (depth)</label>
+              <span class="value"><span id="vibrato-depth-value">20</span> Hz</span>
+            </div>
+            <input type="range" id="vibrato-depth-slider" min="0" max="200" value="20" step="1">
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT: Visualizers -->
+      <div class="viz-col">
+
+        <div class="card viz-card">
+          <div class="viz-block">
+            <div class="viz-label">
+              <span data-i18n="envelope_view">Envolvente ADSR</span>
+              <span class="reading" id="adsr-total-reading">0.45 s total</span>
+            </div>
+            <canvas id="adsr-envelope" height="120"></canvas>
+          </div>
+
+          <div class="viz-block">
+            <div class="viz-label">
+              <span data-i18n="oscilloscope">Osciloscopio (dominio del tiempo)</span>
+              <span class="reading" id="mod-osc-reading">20 ms / div</span>
+            </div>
+            <canvas id="mod-oscilloscope" height="160"></canvas>
+          </div>
+
+          <div class="viz-block">
+            <div class="viz-label">
+              <span data-i18n="spectrum">Analizador de espectro (FFT)</span>
+              <span class="reading" id="mod-fft-reading">20 Hz – 20 kHz</span>
+            </div>
+            <canvas id="mod-spectrum" height="160"></canvas>
           </div>
         </div>
 

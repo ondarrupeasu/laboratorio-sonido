@@ -33,7 +33,18 @@ const I18N = {
     oscillator_b: "Oscilador B",
     beat_preset: "Preajuste de batido (440 / 444 Hz)",
     beat_frequency: "Frecuencia de batido",
-    combined_oscilloscope: "Osciloscopio combinado"
+    combined_oscilloscope: "Osciloscopio combinado",
+    section_adsr: "Envolvente ADSR",
+    attack: "Attack",
+    decay: "Decay",
+    sustain: "Sustain",
+    release: "Release",
+    section_tremolo: "Tremolo (modulación de amplitud)",
+    section_vibrato: "Vibrato (modulación de frecuencia)",
+    rate: "Velocidad (rate)",
+    depth: "Profundidad (depth)",
+    envelope_view: "Envolvente ADSR",
+    mod_play_hint: "Cada pulsación dispara la envolvente ADSR completa"
   },
   eu: {
     app_title: "Soinu Laborategia",
@@ -69,7 +80,18 @@ const I18N = {
     oscillator_b: "B osziladorea",
     beat_preset: "Taupada aurrezarpena (440 / 444 Hz)",
     beat_frequency: "Taupada maiztasuna",
-    combined_oscilloscope: "Osziloskopio konbinatua"
+    combined_oscilloscope: "Osziloskopio konbinatua",
+    section_adsr: "ADSR ingurunea",
+    attack: "Attack",
+    decay: "Decay",
+    sustain: "Sustain",
+    release: "Release",
+    section_tremolo: "Tremoloa (anplitude modulazioa)",
+    section_vibrato: "Vibratoa (maiztasun modulazioa)",
+    rate: "Abiadura (rate)",
+    depth: "Sakonera (depth)",
+    envelope_view: "ADSR ingurunea",
+    mod_play_hint: "Sakatze bakoitzak ADSR inguru osoa abiarazten du"
   },
   en: {
     app_title: "Sound Lab",
@@ -105,7 +127,18 @@ const I18N = {
     oscillator_b: "Oscillator B",
     beat_preset: "Beating preset (440 / 444 Hz)",
     beat_frequency: "Beat frequency",
-    combined_oscilloscope: "Combined oscilloscope"
+    combined_oscilloscope: "Combined oscilloscope",
+    section_adsr: "ADSR envelope",
+    attack: "Attack",
+    decay: "Decay",
+    sustain: "Sustain",
+    release: "Release",
+    section_tremolo: "Tremolo (amplitude modulation)",
+    section_vibrato: "Vibrato (frequency modulation)",
+    rate: "Rate",
+    depth: "Depth",
+    envelope_view: "ADSR envelope",
+    mod_play_hint: "Each press triggers the full ADSR envelope"
   }
 };
 
