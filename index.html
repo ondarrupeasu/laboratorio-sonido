@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Laboratorio de Sonido</title>
+<style>
+  :root {
+    --bg: #f2f2f7;
+    --bg-elev: #ffffff;
+    --bg-elev2: #ffffff;
+    --text: #1c1c1e;
+    --text-secondary: #6e6e73;
+    --border: rgba(60,60,67,0.18);
+    --accent: #007aff;
+    --accent2: #ff9500;
+    --accent3: #34c759;
+    --accent4: #ff3b30;
+    --track-bg: rgba(60,60,67,0.12);
+    --shadow: 0 1px 2px rgba(0,0,0,0.04);
+    --radius: 14px;
+    --radius-sm: 10px;
+    --canvas-bg: #ffffff;
+    --grid-line: rgba(60,60,67,0.08);
+    --wave-color: #007aff;
+    --fft-color: #ff9500;
+  }
+
+  [data-theme="dark"] {
+    --bg: #000000;
+    --bg-elev: #1c1c1e;
+    --bg-elev2: #2c2c2e;
+    --text: #f2f2f7;
+    --text-secondary: #98989d;
+    --border: rgba(255,255,255,0.12);
+    --accent: #0a84ff;
+    --accent2: #ff9f0a;
+    --accent3: #30d158;
+    --accent4: #ff453a;
+    --track-bg: rgba(255,255,255,0.16);
+    --shadow: 0 1px 2px rgba(0,0,0,0.4);
+    --canvas-bg: #1c1c1e;
+    --grid-line: rgba(255,255,255,0.08);
+    --wave-color: #0a84ff;
+    --fft-color: #ff9f0a;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    transition: background 0.25s ease, color 0.25s ease;
+  }
+
+  .app {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 16px;
+    padding-bottom: 48px;
+  }
+
+  /* Top bar */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 4px 18px;
+    gap: 12px;
+  }
+
+  .topbar h1 {
+    font-size: 20px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.3px;
+  }
+
+  .topbar-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Segmented control (iOS style) */
+  .segmented {
+    display: flex;
+    background: var(--track-bg);
+    border-radius: 9px;
+    padding: 2px;
+    gap: 2px;
+  }
+
+  .segmented button {
+    border: none;
+    background: transparent;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+    font-family: inherit;
+    min-width: 40px;
+  }
+
+  .segmented button.active {
+    background: var(--bg-elev);
+    box-shadow: var(--shadow);
+  }
+
+  /* Theme toggle */
+  .icon-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: var(--track-bg);
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  /* Card */
+  .card {
+    background: var(--bg-elev);
+    border-radius: var(--radius);
+    border: 0.5px solid var(--border);
+    box-shadow: var(--shadow);
+    padding: 16px;
+    margin-bottom: 14px;
+  }
+
+  .card h2 {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0 0 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+  }
+
+  /* Main layout grid */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  @media (min-width: 760px) {
+    .main-grid {
+      grid-template-columns: 360px 1fr;
+      align-items: start;
+    }
+  }
+
+  /* landscape phone: side by side even on small screens */
+  @media (orientation: landscape) and (max-width: 900px) {
+    .main-grid {
+      grid-template-columns: 300px 1fr;
+    }
+    .app { padding: 10px; }
+    .topbar { padding: 4px 4px 10px; }
+  }
+
+  /* Visualizer panel */
+  .viz-card canvas {
+    width: 100%;
+    display: block;
+    border-radius: var(--radius-sm);
+    background: var(--canvas-bg);
+  }
+
+  .viz-block {
+    margin-bottom: 14px;
+  }
+
+  .viz-block:last-child { margin-bottom: 0; }
+
+  .viz-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+
+  .viz-label .reading {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    color: var(--text);
+  }
+
+  /* Fila secundaria: forma de onda ideal + medidor vertical */
+  .viz-row {
+    display: grid;
+    grid-template-columns: 1fr 64px;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .viz-row .viz-block {
+    margin-bottom: 0;
+  }
+
+  .viz-col-meter canvas {
+    height: 120px;
+  }
+
+  .meter-reading-vertical {
+    text-align: center;
+    margin-top: 6px;
+    font-size: 11px;
+  }
+
+  /* Controls */
+  .control-row {
+    margin-bottom: 18px;
+  }
+
+  .control-row:last-child { margin-bottom: 4px; }
+
+  .control-row .label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 8px;
+  }
+
+  .control-row label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .control-row .value {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 600;
+    text-align: right;
+  }
+
+  .sub-value {
+    font-size: 11px;
+    color: var(--text-secondary);
+    display: block;
+    margin-top: 2px;
+  }
+
+  /* iOS-style range slider */
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 30px;
+    background: transparent;
+    cursor: pointer;
+    margin: 0;
+    padding: 0;
+  }
+
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px;
+    background: var(--track-bg);
+    border-radius: 2px;
+  }
+
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.25), 0 0 0 0.5px rgba(0,0,0,0.05);
+    margin-top: -12px;
+    border: none;
+  }
+
+  input[type="range"]::-moz-range-track {
+    height: 4px;
+    background: var(--track-bg);
+    border-radius: 2px;
+  }
+
+  input[type="range"]::-moz-range-thumb {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: #ffffff;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+    border: none;
+  }
+
+  /* fill track for accent color */
+  input[type="range"] {
+    accent-color: var(--accent);
+  }
+
+  /* Slider with center zero mark (snap-to-zero) */
+  .slider-zero-wrap {
+    position: relative;
+  }
+
+  .slider-zero-wrap .zero-mark {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 2px;
+    height: 10px;
+    background: var(--text-secondary);
+    opacity: 0.5;
+    transform: translate(-1px, -5px);
+    pointer-events: none;
+    border-radius: 1px;
+  }
+
+  /* Waveform selector buttons */
+  .waveform-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  .wave-btn {
+    background: var(--track-bg);
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 12px 4px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    color: var(--text);
+    font-family: inherit;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .wave-btn.active {
+    background: var(--accent);
+    color: #ffffff;
+  }
+
+  .wave-btn svg { width: 28px; height: 18px; display: block; }
+  .wave-btn span { font-size: 11px; font-weight: 600; }
+
+  /* Main play button */
+  .play-btn {
+    width: 100%;
+    border: none;
+    border-radius: var(--radius);
+    padding: 16px;
+    font-size: 17px;
+    font-weight: 700;
+    cursor: pointer;
+    color: #ffffff;
+    background: var(--accent3);
+    transition: background 0.15s ease, transform 0.1s ease;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .play-btn.playing {
+    background: var(--accent4);
+  }
+
+  .play-btn:active {
+    transform: scale(0.985);
+  }
+
+  /* Note display */
+  .note-display {
+    text-align: center;
+    padding: 10px 0 4px;
+  }
+
+  .note-display .note-name {
+    font-size: 38px;
+    font-weight: 700;
+    letter-spacing: -1px;
+    line-height: 1;
+  }
+
+  .note-display .cents {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    margin-top: 4px;
+  }
+
+  /* Note selector (nota + octava) */
+  .note-selector {
+    margin-top: 12px;
+  }
+
+  .note-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .note-btn {
+    background: var(--track-bg);
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 8px 4px;
+    cursor: pointer;
+    color: var(--text);
+    font-family: inherit;
+    text-align: center;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .note-btn .note-en {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .note-btn .note-solfege {
+    display: block;
+    font-size: 10px;
+    color: var(--text-secondary);
+    margin-top: 1px;
+  }
+
+  .note-btn.active {
+    background: var(--accent);
+    color: #ffffff;
+  }
+
+  .note-btn.active .note-solfege {
+    color: rgba(255,255,255,0.8);
+  }
+
+  .octave-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .octave-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+
+  .octave-buttons {
+    display: flex;
+    gap: 6px;
+    flex: 1;
+  }
+
+  .octave-btn {
+    flex: 1;
+    background: var(--track-bg);
+    border: none;
+    border-radius: var(--radius-sm);
+    padding: 8px 4px;
+    cursor: pointer;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .octave-btn.active {
+    background: var(--accent);
+    color: #ffffff;
+  }
+
+  footer.app-footer {
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 12px;
+    margin-top: 24px;
+    padding: 12px;
+  }
+
+  footer.app-footer a { color: var(--accent); text-decoration: none; }
+
+  /* Tabs for future modules */
+  .module-tabs {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    margin-bottom: 14px;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .module-tabs::-webkit-scrollbar { display: none; }
+
+  .module-tab {
+    flex-shrink: 0;
+    border: none;
+    background: var(--track-bg);
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+  }
+
+  .module-tab.active {
+    background: var(--accent);
+    color: #ffffff;
+  }
+
+  .module-tab.disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+</style>
+</head>
+<body data-theme="light">
+<div class="app">
+
+  <div class="topbar">
+    <h1 id="app-title">Laboratorio de Sonido</h1>
+    <div class="topbar-controls">
+      <div class="segmented" id="lang-switch">
+        <button data-lang="es" class="active">ES</button>
+        <button data-lang="eu">EU</button>
+        <button data-lang="en">EN</button>
+      </div>
+      <button class="icon-btn" id="theme-toggle" aria-label="Cambiar tema">
+        <span id="theme-icon">&#9728;</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="module-tabs" id="module-tabs">
+    <button class="module-tab active" data-module="generator" data-i18n="tab_generator">Generador</button>
+    <button class="module-tab disabled" data-i18n="tab_modulation">Modulación</button>
+    <button class="module-tab disabled" data-i18n="tab_dual">Dos osciladores</button>
+    <button class="module-tab disabled" data-i18n="tab_noise">Ruido y barridos</button>
+    <button class="module-tab disabled" data-i18n="tab_filters">Filtros</button>
+    <button class="module-tab disabled" data-i18n="tab_sampling">Muestreo</button>
+    <button class="module-tab disabled" data-i18n="tab_stereo">Estéreo</button>
+  </div>
+
+  <div class="main-grid">
+
+    <!-- LEFT: Controls -->
+    <div class="controls-col">
+
+      <div class="card">
+        <button class="play-btn" id="play-btn">
+          <span id="play-icon">&#9658;</span>
+          <span id="play-label" data-i18n="generate">Generar tono</span>
+        </button>
+      </div>
+
+      <div class="card">
+        <h2 data-i18n="section_oscillator">Oscilador</h2>
+
+        <div class="control-row">
+          <div class="label-row">
+            <label data-i18n="waveform">Forma de onda</label>
+          </div>
+          <div class="waveform-grid" id="waveform-grid">
+            <button class="wave-btn active" data-wave="sine">
+              <svg viewBox="0 0 28 18"><path d="M0 9 C 3 0, 4 0, 7 9 C 10 18, 11 18, 14 9 C 17 0, 18 0, 21 9 C 24 18, 25 18, 28 9" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+              <span data-i18n="wave_sine">Senoidal</span>
+            </button>
+            <button class="wave-btn" data-wave="square">
+              <svg viewBox="0 0 28 18"><path d="M0 14 L0 2 L14 2 L14 16 L28 16 L28 4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+              <span data-i18n="wave_square">Cuadrada</span>
+            </button>
+            <button class="wave-btn" data-wave="triangle">
+              <svg viewBox="0 0 28 18"><path d="M0 14 L7 2 L21 16 L28 4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+              <span data-i18n="wave_triangle">Triangular</span>
+            </button>
+            <button class="wave-btn" data-wave="sawtooth">
+              <svg viewBox="0 0 28 18"><path d="M0 16 L9 2 L9 16 L18 2 L18 16 L27 2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+              <span data-i18n="wave_sawtooth">Sierra</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="control-row">
+          <div class="label-row">
+            <label data-i18n="frequency">Frecuencia</label>
+            <span class="value"><span id="freq-value">440</span> Hz</span>
+          </div>
+          <input type="range" id="freq-slider" min="0" max="1000" value="500" step="1">
+        </div>
+
+        <div class="note-display">
+          <div class="note-name" id="note-name">A4</div>
+          <div class="cents" id="note-cents">+0 cents</div>
+        </div>
+
+        <div class="note-selector">
+          <div class="note-grid" id="note-grid"></div>
+          <div class="octave-row">
+            <span class="octave-label" data-i18n="octave">Octava</span>
+            <div class="octave-buttons" id="octave-buttons"></div>
+          </div>
+        </div>
+
+        <div class="control-row" style="margin-top:18px;">
+          <div class="label-row">
+            <label data-i18n="amplitude">Amplitud</label>
+            <span class="value"><span id="amp-value">50</span>%<span class="sub-value" id="amp-db">-6.0 dBFS</span></span>
+          </div>
+          <input type="range" id="amp-slider" min="0" max="100" value="50" step="1">
+        </div>
+
+        <div class="control-row">
+          <div class="label-row">
+            <label data-i18n="pan">Paneo (L-R)</label>
+            <span class="value"><span id="pan-value">0</span></span>
+          </div>
+          <div class="slider-zero-wrap">
+            <input type="range" id="pan-slider" min="-100" max="100" value="0" step="1">
+            <span class="zero-mark"></span>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- RIGHT: Visualizers -->
+    <div class="viz-col">
+
+      <div class="card viz-card">
+        <div class="viz-block">
+          <div class="viz-label">
+            <span data-i18n="oscilloscope">Osciloscopio (dominio del tiempo)</span>
+            <span class="reading" id="osc-reading">20 ms / div</span>
+          </div>
+          <canvas id="oscilloscope" height="160"></canvas>
+        </div>
+
+        <div class="viz-row">
+          <div class="viz-block viz-col-main">
+            <div class="viz-label">
+              <span data-i18n="cycle_view">Forma de onda ideal (1 periodo)</span>
+              <span class="reading" id="cycle-reading">0.00 ms</span>
+            </div>
+            <canvas id="cycle-view" height="120"></canvas>
+          </div>
+
+          <div class="viz-block viz-col-meter">
+            <div class="viz-label">
+              <span data-i18n="meter">Nivel</span>
+            </div>
+            <canvas id="meter" height="120"></canvas>
+            <div class="reading meter-reading-vertical" id="meter-reading">-∞ dB</div>
+          </div>
+        </div>
+
+        <div class="viz-block">
+          <div class="viz-label">
+            <span data-i18n="spectrum">Analizador de espectro (FFT)</span>
+            <span class="reading" id="fft-reading">20 Hz – 20 kHz</span>
+          </div>
+          <canvas id="spectrum" height="160"></canvas>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <footer class="app-footer">
+    <span data-i18n="footer_text">Laboratorio de Sonido — CIFP Tartanga LHII</span>
+  </footer>
+
+</div>
+
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
