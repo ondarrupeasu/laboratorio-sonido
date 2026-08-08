@@ -1,6 +1,6 @@
 const I18N = {
   es: {
-    app_title: "Laboratorio de Sonido",
+    app_title: "SoundLab",
     tab_generator: "Generador",
     tab_modulation: "Modulación",
     tab_dual: "Dos osciladores",
@@ -25,7 +25,7 @@ const I18N = {
     cycle_view: "Forma de onda ideal (1 periodo)",
     spectrum: "Analizador de espectro (FFT)",
     meter: "Medidor de nivel",
-    footer_text: "Laboratorio de Sonido — CIFP Tartanga LHII",
+    footer_text: "SoundLab — CIFP Tartanga LHII",
     pan_left: "Izq",
     pan_center: "Centro",
     pan_right: "Der",
@@ -93,7 +93,7 @@ const I18N = {
     balance_meter: "Medidor de balance L/R"
   },
   eu: {
-    app_title: "Soinu Laborategia",
+    app_title: "SoundLab",
     tab_generator: "Sortzailea",
     tab_modulation: "Modulazioa",
     tab_dual: "Bi osziladore",
@@ -118,7 +118,7 @@ const I18N = {
     cycle_view: "Uhin forma ideala (periodo 1)",
     spectrum: "Espektro analizatzailea (FFT)",
     meter: "Maila neurgailua",
-    footer_text: "Soinu Laborategia — CIFP Tartanga LHII",
+    footer_text: "SoundLab — CIFP Tartanga LHII",
     pan_left: "Ezk",
     pan_center: "Erdian",
     pan_right: "Esk",
@@ -186,7 +186,7 @@ const I18N = {
     balance_meter: "E/E balantze neurgailua"
   },
   en: {
-    app_title: "Sound Lab",
+    app_title: "SoundLab",
     tab_generator: "Generator",
     tab_modulation: "Modulation",
     tab_dual: "Two oscillators",
@@ -211,7 +211,7 @@ const I18N = {
     cycle_view: "Ideal waveform (1 period)",
     spectrum: "Spectrum analyzer (FFT)",
     meter: "Level meter",
-    footer_text: "Sound Lab — CIFP Tartanga LHII",
+    footer_text: "SoundLab — CIFP Tartanga LHII",
     pan_left: "L",
     pan_center: "Center",
     pan_right: "R",

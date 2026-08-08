@@ -1,6 +1,6 @@
 {
-  "name": "Laboratorio de Sonido",
-  "short_name": "Lab Sonido",
+  "name": "SoundLab",
+  "short_name": "SoundLab",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
