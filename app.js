@@ -2774,7 +2774,7 @@ const dubState = {
   rate: 1.0,        // Hz LFO
   toneDb: 0,        // -15..+15 dB (highshelf)
   filterMode: "filter",  // "filter" | "filtertune"
-  triggerMode: "latch"   // "latch" (fijar) | "hold" (mantener)
+  triggerMode: "hold"    // "hold" (mantener, fiel al pedal) | "latch" (fijar)
 };
 
 // Alterna un pad: dispara o para según el modo de disparo
