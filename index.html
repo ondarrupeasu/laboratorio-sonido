@@ -914,6 +914,15 @@
     background: linear-gradient(180deg, var(--accent2), #b36b00);
   }
 
+  .dub-trigmode {
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; margin-top: 14px;
+  }
+  .dub-trigmode-lbl {
+    font-size: 12px; font-weight: 600; color: var(--text-secondary);
+  }
+  .dub-trigmode .segmented button { min-width: 64px; }
+
   .ds71-hint {
     font-size: 12px; color: var(--text-secondary);
     text-align: center; margin: 12px 0 0;
@@ -1970,7 +1979,14 @@
             </div>
 
           </div>
-          <p class="ds71-hint" data-i18n="dub_play_hint">Mantén pulsado un pad — o las teclas 1, 2, 3, 4 — para disparar.</p>
+          <div class="dub-trigmode">
+            <span class="dub-trigmode-lbl" data-i18n="dub_trigmode_label">Modo de disparo</span>
+            <div class="segmented" id="dub-trigmode">
+              <button data-mode="latch" class="active" data-i18n="dub_trigmode_latch">Fijar</button>
+              <button data-mode="hold" data-i18n="dub_trigmode_hold">Mantener</button>
+            </div>
+          </div>
+          <p class="ds71-hint" data-i18n="dub_play_hint">Toca un pad — o las teclas 1-4 — para disparar.</p>
         </div>
 
         <div class="card">

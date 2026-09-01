@@ -2760,6 +2760,7 @@ let dubAnalyserTime = null, dubAnalyserFreq = null;
 let dubIsPlaying = false;   // grafo vivo (osciladores corriendo)
 let dubHeld = false;        // hay un pad/tecla mantenido
 let dubHeldPad = null;
+let dubLatchedPad = null;   // pad fijado (modo latch)
 let dubRafId = null;
 
 const dubState = {
@@ -2772,8 +2773,19 @@ const dubState = {
   sweep: 0,         // -1 (UP) .. 0 (FLAT) .. +1 (DOWN)
   rate: 1.0,        // Hz LFO
   toneDb: 0,        // -15..+15 dB (highshelf)
-  filterMode: "filter"   // "filter" | "filtertune"
+  filterMode: "filter",  // "filter" | "filtertune"
+  triggerMode: "latch"   // "latch" (fijar) | "hold" (mantener)
 };
+
+// Alterna un pad: dispara o para según el modo de disparo
+function dubPadToggle(idx) {
+  if (dubState.triggerMode === "latch") {
+    if (dubLatchedPad === idx) { dubRelease(); dubLatchedPad = null; }
+    else { dubTrigger(idx); dubLatchedPad = idx; }
+  } else {
+    dubTrigger(idx);
+  }
+}
 
 // Presets: 2 bancos x 4 ondas de LFO. rate/depth = multiplicadores de carácter.
 const DUB_PRESETS = [
@@ -2973,6 +2985,7 @@ function dubStopTone() {
   dubIsPlaying = false;
   dubHeld = false;
   dubHeldPad = null;
+  dubLatchedPad = null;
   if (dubRafId) cancelAnimationFrame(dubRafId);
   document.querySelectorAll("#dub-pads .ds71-pad").forEach(p => p.classList.remove("active"));
   dubClearCanvases();
@@ -3138,13 +3151,32 @@ function initDubControls() {
     }
   });
 
+  // Modo de disparo: Fijar (latch) / Mantener (hold)
+  const trigmode = document.getElementById("dub-trigmode");
+  trigmode.querySelectorAll("button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      // al pasar a "mantener", soltar cualquier pad fijado
+      if (btn.dataset.mode === "hold" && dubLatchedPad !== null) {
+        dubRelease(); dubLatchedPad = null;
+      }
+      dubState.triggerMode = btn.dataset.mode;
+      trigmode.querySelectorAll("button").forEach(b => b.classList.toggle("active", b === btn));
+    });
+  });
+
   // Pads (triggers)
   document.querySelectorAll("#dub-pads .ds71-pad").forEach(pad => {
     const idx = parseInt(pad.dataset.pad, 10);
-    pad.addEventListener("pointerdown", e => { e.preventDefault(); dubTrigger(idx); });
-    pad.addEventListener("pointerup", e => { e.preventDefault(); dubRelease(); });
-    pad.addEventListener("pointerleave", () => { if (dubHeldPad === idx) dubRelease(); });
-    pad.addEventListener("pointercancel", () => dubRelease());
+    pad.addEventListener("pointerdown", e => { e.preventDefault(); dubPadToggle(idx); });
+    pad.addEventListener("pointerup", e => {
+      if (dubState.triggerMode === "hold") { e.preventDefault(); dubRelease(); }
+    });
+    pad.addEventListener("pointerleave", () => {
+      if (dubState.triggerMode === "hold" && dubHeldPad === idx) dubRelease();
+    });
+    pad.addEventListener("pointercancel", () => {
+      if (dubState.triggerMode === "hold") dubRelease();
+    });
   });
 
   // Teclado 1-4 (solo cuando la pestaña está visible)
@@ -3152,13 +3184,15 @@ function initDubControls() {
     const view = document.getElementById("module-dubsiren");
     if (!view || view.hidden || e.repeat) return;
     const idx = ["1", "2", "3", "4"].indexOf(e.key);
-    if (idx >= 0) { e.preventDefault(); dubTrigger(idx); }
+    if (idx >= 0) { e.preventDefault(); dubPadToggle(idx); }
   });
   document.addEventListener("keyup", e => {
     const view = document.getElementById("module-dubsiren");
     if (!view || view.hidden) return;
     const idx = ["1", "2", "3", "4"].indexOf(e.key);
-    if (idx >= 0 && dubHeldPad === idx) { e.preventDefault(); dubRelease(); }
+    if (idx >= 0 && dubState.triggerMode === "hold" && dubHeldPad === idx) {
+      e.preventDefault(); dubRelease();
+    }
   });
 }
 
