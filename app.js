@@ -566,6 +566,9 @@ function initControls() {
     if (stereoIsPlaying) {
       stereoClearCanvases();
     }
+    if (dubIsPlaying) {
+      dubClearCanvases();
+    }
   });
 
   // Cambio de módulo (tabs)
@@ -629,6 +632,9 @@ function initControls() {
         document.getElementById("stereo-play-icon").innerHTML = "&#9658;";
         document.getElementById("stereo-play-label").textContent = t("generate");
       }
+      if (target !== "dubsiren" && dubIsPlaying) {
+        dubStopTone();
+      }
 
       if (target === "dual") {
         setTimeout(() => dualClearCanvases(), 50);
@@ -642,6 +648,8 @@ function initControls() {
         setTimeout(() => samplingClearCanvases(), 50);
       } else if (target === "stereo") {
         setTimeout(() => stereoClearCanvases(), 50);
+      } else if (target === "dubsiren") {
+        setTimeout(() => dubClearCanvases(), 50);
       } else if (target === "generator" && !isPlaying) {
         setTimeout(() => clearCanvases(), 50);
       }
@@ -2736,3 +2744,431 @@ function stereoInit() {
 }
 
 document.addEventListener("DOMContentLoaded", stereoInit);
+
+
+/* ============================================================
+   ====== MÓDULO: DUB SIREN (Benidub DS71) ======
+   Réplica jugable del pedal sintetizador de sirenas dub.
+   Cadena: VCO -> VCF(lowpass) -> VCA(envolvente) -> TONE -> VOLUME -> salida
+   LFO -> profundidad -> frecuencia del VCO (wobble de sirena)
+   ============================================================ */
+
+let dubAudioCtx = null;
+let dubVco = null, dubVcf = null, dubVca = null, dubTone = null, dubOut = null;
+let dubLfo = null, dubLfoGain = null;
+let dubAnalyserTime = null, dubAnalyserFreq = null;
+let dubIsPlaying = false;   // grafo vivo (osciladores corriendo)
+let dubHeld = false;        // hay un pad/tecla mantenido
+let dubHeldPad = null;
+let dubRafId = null;
+
+const dubState = {
+  bank: 0,          // 0 = A, 1 = B
+  preset: 0,        // 0..3
+  volume: 0.8,      // 0..1
+  decay: 0.35,      // segundos
+  depth: 0.35,      // 0..1
+  tune: 390,        // Hz (30..9000)
+  sweep: 0,         // -1 (UP) .. 0 (FLAT) .. +1 (DOWN)
+  rate: 1.0,        // Hz LFO
+  toneDb: 0,        // -15..+15 dB (highshelf)
+  filterMode: "filter"   // "filter" | "filtertune"
+};
+
+// Presets: 2 bancos x 4 ondas de LFO. rate/depth = multiplicadores de carácter.
+const DUB_PRESETS = [
+  // Banco A (suave -> duro)
+  [ { wave: "sine",     rate: 1,   depth: 1.0 },
+    { wave: "triangle", rate: 1,   depth: 1.0 },
+    { wave: "square",   rate: 1,   depth: 1.0 },
+    { wave: "sawtooth", rate: 1,   depth: 1.0 } ],
+  // Banco B (más rápido / agresivo)
+  [ { wave: "sawtooth", rate: 2,   depth: 1.4 },
+    { wave: "square",   rate: 2,   depth: 1.2 },
+    { wave: "triangle", rate: 0.5, depth: 1.6 },
+    { wave: "sine",     rate: 3,   depth: 0.8 } ]
+];
+
+const DUB_WAVE_PATHS = {
+  sine: "M0 9 C 3 0, 4 0, 7 9 C 10 18, 11 18, 14 9 C 17 0, 18 0, 21 9 C 24 18, 25 18, 28 9",
+  square: "M0 14 L0 2 L14 2 L14 16 L28 16 L28 4",
+  triangle: "M0 14 L7 2 L21 16 L28 4",
+  sawtooth: "M0 16 L9 2 L9 16 L18 2 L18 16 L27 2"
+};
+
+function dubWaveSVG(type) {
+  return `<svg viewBox="0 0 28 18"><path d="${DUB_WAVE_PATHS[type]}" fill="none" stroke="#e8e8ea" stroke-width="2"/></svg>`;
+}
+
+/* ------ Mapeos de knob ------ */
+function dubExpMap(norm, lo, hi) { return lo * Math.pow(hi / lo, norm); }
+function dubLinMap(norm, lo, hi) { return lo + (hi - lo) * norm; }
+
+/* ------ Audio ------ */
+function dubEnsureAudioContext() {
+  if (!dubAudioCtx) {
+    dubAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (dubAudioCtx.state === "suspended") {
+    dubAudioCtx.resume();
+  }
+}
+
+function dubEnsureGraph() {
+  if (dubIsPlaying) return;
+  dubEnsureAudioContext();
+  const ctx = dubAudioCtx;
+
+  dubVco = ctx.createOscillator();
+  dubVco.type = "sawtooth";
+  dubVco.frequency.value = dubState.tune;
+
+  dubVcf = ctx.createBiquadFilter();
+  dubVcf.type = "lowpass";
+  dubVcf.frequency.value = dubCutoffHeld();
+  dubVcf.Q.value = 6;
+
+  dubVca = ctx.createGain();
+  dubVca.gain.value = 0.0001;
+
+  dubTone = ctx.createBiquadFilter();
+  dubTone.type = "highshelf";
+  dubTone.frequency.value = 2000;
+  dubTone.gain.value = dubState.toneDb;
+
+  dubOut = ctx.createGain();
+  dubOut.gain.value = dubState.volume;
+
+  dubAnalyserTime = ctx.createAnalyser();
+  dubAnalyserTime.fftSize = 2048;
+  dubAnalyserFreq = ctx.createAnalyser();
+  dubAnalyserFreq.fftSize = 2048;
+
+  // LFO -> pitch del VCO
+  dubLfo = ctx.createOscillator();
+  dubLfo.type = DUB_PRESETS[dubState.bank][dubState.preset].wave;
+  dubLfo.frequency.value = dubLfoRateHz();
+  dubLfoGain = ctx.createGain();
+  dubLfoGain.gain.value = dubLfoDepthHz();
+
+  // Cadena de audio
+  dubVco.connect(dubVcf);
+  dubVcf.connect(dubVca);
+  dubVca.connect(dubTone);
+  dubTone.connect(dubOut);
+  dubOut.connect(dubAnalyserTime);
+  dubOut.connect(dubAnalyserFreq);
+  dubOut.connect(ctx.destination);
+
+  dubLfo.connect(dubLfoGain);
+  dubLfoGain.connect(dubVco.frequency);
+
+  dubVco.start();
+  dubLfo.start();
+
+  dubIsPlaying = true;
+  dubStartVisualLoop();
+}
+
+function dubCutoffHeld() {
+  return Math.min(16000, Math.max(1200, dubState.tune * 4));
+}
+
+function dubLfoRateHz() {
+  return dubState.rate * DUB_PRESETS[dubState.bank][dubState.preset].rate;
+}
+
+function dubLfoDepthHz() {
+  const presetDepth = DUB_PRESETS[dubState.bank][dubState.preset].depth;
+  return dubState.depth * dubState.tune * 0.9 * presetDepth;
+}
+
+// Dispara la sirena (pad/tecla pulsado)
+function dubTrigger(padIndex) {
+  dubEnsureGraph();
+  dubState.preset = padIndex;
+  const preset = DUB_PRESETS[dubState.bank][padIndex];
+  const ctx = dubAudioCtx;
+  const now = ctx.currentTime;
+
+  // LFO: onda + rango del preset
+  dubLfo.type = preset.wave;
+  dubLfo.frequency.setValueAtTime(dubLfoRateHz(), now);
+  dubLfoGain.gain.setValueAtTime(dubLfoDepthHz(), now);
+
+  // VCO: frecuencia base (el LFO modula encima)
+  dubVco.frequency.cancelScheduledValues(now);
+  dubVco.frequency.setValueAtTime(dubState.tune, now);
+
+  // Filtro abierto mientras se mantiene (como un cutoff normal)
+  dubVcf.frequency.cancelScheduledValues(now);
+  dubVcf.frequency.setValueAtTime(dubCutoffHeld(), now);
+
+  // Envolvente: attack rápido a pico
+  const peak = 0.9;
+  dubVca.gain.cancelScheduledValues(now);
+  dubVca.gain.setValueAtTime(Math.max(dubVca.gain.value, 0.0001), now);
+  dubVca.gain.linearRampToValueAtTime(peak, now + 0.008);
+
+  dubHeld = true;
+  dubHeldPad = padIndex;
+
+  // Marca visual del pad
+  document.querySelectorAll("#dub-pads .ds71-pad").forEach(p => {
+    p.classList.toggle("active", parseInt(p.dataset.pad, 10) === padIndex);
+  });
+}
+
+// Suelta: decay + barrido de filtro (y de tono si FILTER+TUNE)
+function dubRelease() {
+  if (!dubHeld || !dubIsPlaying) return;
+  dubHeld = false;
+  const ctx = dubAudioCtx;
+  const now = ctx.currentTime;
+  const decay = dubState.decay;
+
+  // VCA -> silencio
+  const cur = Math.max(dubVca.gain.value, 0.0001);
+  dubVca.gain.cancelScheduledValues(now);
+  dubVca.gain.setValueAtTime(cur, now);
+  dubVca.gain.linearRampToValueAtTime(0.0001, now + decay);
+
+  // Barrido del filtro según SWEEP
+  const sweepVal = dubState.sweep;         // -1 UP .. +1 DOWN
+  const amt = Math.abs(sweepVal);
+  const held = dubCutoffHeld();
+  dubVcf.frequency.cancelScheduledValues(now);
+  dubVcf.frequency.setValueAtTime(held, now);
+  if (amt > 0.05) {
+    let target;
+    if (sweepVal < 0) target = held + (16000 - held) * amt;   // UP: abre
+    else target = held - (held - 150) * amt;                  // DOWN: cierra
+    dubVcf.frequency.exponentialRampToValueAtTime(Math.max(60, target), now + decay);
+
+    // FILTER+TUNE: el barrido también mueve el tono
+    if (dubState.filterMode === "filtertune") {
+      const semis = amt * 12;
+      const factor = Math.pow(2, semis / 12);
+      const pitchTarget = sweepVal < 0 ? dubState.tune * factor : dubState.tune / factor;
+      dubVco.frequency.cancelScheduledValues(now);
+      dubVco.frequency.setValueAtTime(dubState.tune, now);
+      dubVco.frequency.exponentialRampToValueAtTime(
+        Math.min(12000, Math.max(20, pitchTarget)), now + decay);
+    }
+  }
+
+  // Quitar marca visual
+  document.querySelectorAll("#dub-pads .ds71-pad").forEach(p => p.classList.remove("active"));
+  dubHeldPad = null;
+}
+
+function dubStopTone() {
+  if (!dubIsPlaying) return;
+  try { dubVco.stop(); } catch (e) {}
+  try { dubLfo.stop(); } catch (e) {}
+  [dubVco, dubVcf, dubVca, dubTone, dubOut, dubLfo, dubLfoGain,
+   dubAnalyserTime, dubAnalyserFreq].forEach(n => { try { n.disconnect(); } catch (e) {} });
+  dubVco = dubVcf = dubVca = dubTone = dubOut = dubLfo = dubLfoGain = null;
+  dubAnalyserTime = dubAnalyserFreq = null;
+  dubIsPlaying = false;
+  dubHeld = false;
+  dubHeldPad = null;
+  if (dubRafId) cancelAnimationFrame(dubRafId);
+  document.querySelectorAll("#dub-pads .ds71-pad").forEach(p => p.classList.remove("active"));
+  dubClearCanvases();
+  dubResetRateLed();
+}
+
+/* ------ Parámetros en vivo ------ */
+function dubApplyTune() {
+  if (dubIsPlaying) {
+    const now = dubAudioCtx.currentTime;
+    if (dubHeld) dubVco.frequency.setValueAtTime(dubState.tune, now);
+    dubLfoGain.gain.setValueAtTime(dubLfoDepthHz(), now);
+    if (dubHeld) dubVcf.frequency.setValueAtTime(dubCutoffHeld(), now);
+  }
+}
+function dubApplyDepth() {
+  if (dubIsPlaying) dubLfoGain.gain.setValueAtTime(dubLfoDepthHz(), dubAudioCtx.currentTime);
+}
+function dubApplyRate() {
+  if (dubIsPlaying) dubLfo.frequency.setValueAtTime(dubLfoRateHz(), dubAudioCtx.currentTime);
+}
+function dubApplyVolume() {
+  if (dubIsPlaying) dubOut.gain.setValueAtTime(dubState.volume, dubAudioCtx.currentTime);
+}
+function dubApplyTone() {
+  if (dubIsPlaying) dubTone.gain.setValueAtTime(dubState.toneDb, dubAudioCtx.currentTime);
+}
+
+/* ------ Visualización ------ */
+function dubClearCanvases() {
+  ["dub-oscilloscope", "dub-spectrum"].forEach(id => {
+    const canvas = document.getElementById(id);
+    if (!canvas) return;
+    const { ctx, width, height } = setupCanvas(canvas);
+    ctx.clearRect(0, 0, width, height);
+    drawGrid(ctx, width, height);
+  });
+}
+
+function dubStartVisualLoop() {
+  const oscSetup = setupCanvas(document.getElementById("dub-oscilloscope"));
+  const fftSetup = setupCanvas(document.getElementById("dub-spectrum"));
+  const timeData = new Uint8Array(dubAnalyserTime.fftSize);
+  const freqData = new Uint8Array(dubAnalyserFreq.frequencyBinCount);
+  const led = document.getElementById("dub-led-rate");
+
+  function draw() {
+    if (!dubIsPlaying) return;
+    dubAnalyserTime.getByteTimeDomainData(timeData);
+    drawOscilloscope(oscSetup.ctx, oscSetup.width, oscSetup.height, timeData);
+    dubAnalyserFreq.getByteFrequencyData(freqData);
+    drawSpectrum(fftSetup.ctx, fftSetup.width, fftSetup.height, freqData);
+
+    // LED del LFO al ritmo del rate
+    if (led) {
+      const phase = (dubAudioCtx.currentTime * dubLfoRateHz()) % 1;
+      const on = 0.5 + 0.5 * Math.sin(2 * Math.PI * phase);
+      const r = Math.round(58 + on * 197), g = Math.round(16 + on * 40), b = Math.round(16 + on * 26);
+      led.style.background = `rgb(${r},${g},${b})`;
+      led.style.boxShadow = on > 0.5 ? `0 0 ${Math.round(on * 8)}px rgba(255,69,58,${on.toFixed(2)})`
+                                     : "inset 0 0 2px rgba(0,0,0,0.8)";
+    }
+    dubRafId = requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+function dubResetRateLed() {
+  const led = document.getElementById("dub-led-rate");
+  if (led) { led.style.background = "#3a1010"; led.style.boxShadow = "inset 0 0 2px rgba(0,0,0,0.8)"; }
+}
+
+/* ------ Pads / banco / knobs ------ */
+function dubRenderPads() {
+  const preset = DUB_PRESETS[dubState.bank];
+  document.querySelectorAll("#dub-pads .ds71-pad").forEach(p => {
+    const i = parseInt(p.dataset.pad, 10);
+    p.querySelector(".pad-wave").innerHTML = dubWaveSVG(preset[i].wave);
+  });
+}
+
+function dubSetBankLeds() {
+  const a = document.getElementById("dub-led-a");
+  const b = document.getElementById("dub-led-b");
+  const on = el => { el.style.background = "#30d158"; el.style.boxShadow = "0 0 6px #30d158"; };
+  const off = el => { el.style.background = "#103a18"; el.style.boxShadow = "inset 0 0 2px rgba(0,0,0,0.8)"; };
+  if (dubState.bank === 0) { on(a); off(b); } else { off(a); on(b); }
+}
+
+// Knob giratorio con arrastre vertical y rueda
+function makeDubKnob(knobEl, norm0, onChange) {
+  const face = knobEl.querySelector(".knob-face");
+  let norm = norm0;
+  function render() { face.style.transform = `rotate(${-135 + norm * 270}deg)`; }
+  function setNorm(n) { norm = Math.max(0, Math.min(1, n)); render(); onChange(norm); }
+  render();
+
+  let dragging = false, startY = 0, startNorm = 0;
+  knobEl.addEventListener("pointerdown", e => {
+    dragging = true; startY = e.clientY; startNorm = norm;
+    knobEl.setPointerCapture(e.pointerId); e.preventDefault();
+  });
+  knobEl.addEventListener("pointermove", e => {
+    if (!dragging) return;
+    setNorm(startNorm + (startY - e.clientY) / 200);
+  });
+  const end = e => { dragging = false; try { knobEl.releasePointerCapture(e.pointerId); } catch (er) {} };
+  knobEl.addEventListener("pointerup", end);
+  knobEl.addEventListener("pointercancel", end);
+  knobEl.addEventListener("wheel", e => {
+    e.preventDefault();
+    setNorm(norm - Math.sign(e.deltaY) * 0.03);
+  }, { passive: false });
+
+  return { set: n => { norm = Math.max(0, Math.min(1, n)); render(); } };
+}
+
+function initDubControls() {
+  // Knobs
+  makeDubKnob(document.getElementById("dub-volume-knob"), 0.8, n => {
+    dubState.volume = dubLinMap(n, 0, 1); dubApplyVolume();
+  });
+  makeDubKnob(document.getElementById("dub-decay-knob"), 0.35, n => {
+    dubState.decay = dubExpMap(n, 0.05, 4.0);
+  });
+  makeDubKnob(document.getElementById("dub-depth-knob"), 0.35, n => {
+    dubState.depth = dubLinMap(n, 0, 1); dubApplyDepth();
+  });
+  makeDubKnob(document.getElementById("dub-tune-knob"), 0.45, n => {
+    dubState.tune = dubExpMap(n, 30, 9000); dubApplyTune();
+  });
+  makeDubKnob(document.getElementById("dub-sweep-knob"), 0.5, n => {
+    dubState.sweep = n * 2 - 1;
+  });
+  makeDubKnob(document.getElementById("dub-rate-knob"), 0.4, n => {
+    dubState.rate = dubExpMap(n, 0.1, 30); dubApplyRate();
+  });
+  makeDubKnob(document.getElementById("dub-tone-knob"), 0.5, n => {
+    dubState.toneDb = (n - 0.5) * 30; dubApplyTone();
+  });
+  makeDubKnob(document.getElementById("dub-trigsens-knob"), 0.5, () => {}); // decorativo (trigger externo no simulado)
+
+  // Switch FILTER / FILTER+TUNE
+  const sw = document.getElementById("dub-filtermode");
+  sw.addEventListener("click", () => {
+    dubState.filterMode = dubState.filterMode === "filter" ? "filtertune" : "filter";
+    sw.querySelectorAll(".sw-opt").forEach(o => {
+      o.classList.toggle("on", o.dataset.mode === (dubState.filterMode === "filter" ? "filter" : "filtertune"));
+    });
+  });
+
+  // Banco A/B
+  document.getElementById("dub-bank-btn").addEventListener("click", () => {
+    dubState.bank = dubState.bank === 0 ? 1 : 0;
+    dubSetBankLeds();
+    dubRenderPads();
+    if (dubIsPlaying && dubHeld) {
+      const preset = DUB_PRESETS[dubState.bank][dubState.preset];
+      const now = dubAudioCtx.currentTime;
+      dubLfo.type = preset.wave;
+      dubLfo.frequency.setValueAtTime(dubLfoRateHz(), now);
+      dubLfoGain.gain.setValueAtTime(dubLfoDepthHz(), now);
+    }
+  });
+
+  // Pads (triggers)
+  document.querySelectorAll("#dub-pads .ds71-pad").forEach(pad => {
+    const idx = parseInt(pad.dataset.pad, 10);
+    pad.addEventListener("pointerdown", e => { e.preventDefault(); dubTrigger(idx); });
+    pad.addEventListener("pointerup", e => { e.preventDefault(); dubRelease(); });
+    pad.addEventListener("pointerleave", () => { if (dubHeldPad === idx) dubRelease(); });
+    pad.addEventListener("pointercancel", () => dubRelease());
+  });
+
+  // Teclado 1-4 (solo cuando la pestaña está visible)
+  document.addEventListener("keydown", e => {
+    const view = document.getElementById("module-dubsiren");
+    if (!view || view.hidden || e.repeat) return;
+    const idx = ["1", "2", "3", "4"].indexOf(e.key);
+    if (idx >= 0) { e.preventDefault(); dubTrigger(idx); }
+  });
+  document.addEventListener("keyup", e => {
+    const view = document.getElementById("module-dubsiren");
+    if (!view || view.hidden) return;
+    const idx = ["1", "2", "3", "4"].indexOf(e.key);
+    if (idx >= 0 && dubHeldPad === idx) { e.preventDefault(); dubRelease(); }
+  });
+}
+
+/* ------ Init del módulo Dub Siren ------ */
+function dubInit() {
+  initDubControls();
+  dubRenderPads();
+  dubSetBankLeds();
+  dubResetRateLed();
+  setTimeout(() => dubClearCanvases(), 50);
+}
+
+document.addEventListener("DOMContentLoaded", dubInit);

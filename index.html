@@ -762,6 +762,176 @@
     line-height: 1;
     padding: 0;
   }
+
+  /* ====== Módulo Dub Siren (Benidub DS71) ====== */
+  .dub-heading-row { margin-bottom: 14px; }
+  .dub-heading-row h2 {
+    font-size: 18px; font-weight: 700; margin: 0; letter-spacing: -0.3px;
+    color: var(--text); display: block; text-transform: none;
+  }
+  .dub-heading-row p {
+    margin: 4px 0 0; font-size: 13px; color: var(--text-secondary);
+  }
+
+  /* Panel del pedal: siempre oscuro (réplica del hardware) */
+  .ds71-card { padding: 0; overflow: hidden; }
+  .ds71-panel {
+    background: linear-gradient(180deg, #1a1a1c 0%, #0e0e10 100%);
+    color: #e8e8ea;
+    padding: 16px 16px 20px;
+    border-radius: var(--radius);
+    border: 1px solid #000;
+    user-select: none;
+  }
+  .ds71-io {
+    display: flex; justify-content: space-between;
+    font-size: 9px; letter-spacing: 0.5px; color: #6a6a6e;
+    padding: 0 4px 10px; border-bottom: 1px solid #2a2a2e; margin-bottom: 14px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .ds71-header-lbl {
+    font-size: 11px; font-weight: 700; letter-spacing: 1.5px; color: #cfcfd2;
+    border: 1px solid #4a4a4e; border-radius: 3px; padding: 2px 8px;
+    display: inline-block;
+  }
+  .ds71-toprow {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 8px; margin-bottom: 14px;
+  }
+  .ds71-toprow .ds71-trims { display: flex; gap: 18px; align-items: flex-end; }
+
+  .ds71-knobs {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 10px; align-items: start;
+  }
+  .ds71-midrow {
+    display: flex; align-items: center; justify-content: space-between;
+    margin: 12px 2px; gap: 12px;
+  }
+
+  /* Knob giratorio */
+  .knob-wrap { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .knob-wrap .knob-name {
+    font-size: 11px; font-weight: 700; letter-spacing: 1px; color: #e8e8ea;
+  }
+  .knob-wrap .knob-ends {
+    display: flex; justify-content: space-between; width: 100%;
+    font-size: 8px; letter-spacing: 0.3px; color: #86868a; margin-top: -2px;
+  }
+  .knob {
+    position: relative; width: 58px; height: 58px;
+    touch-action: none; cursor: grab;
+  }
+  .knob.big { width: 84px; height: 84px; }
+  .knob.small { width: 32px; height: 32px; }
+  .knob:active { cursor: grabbing; }
+  .knob::before {
+    content: ""; position: absolute; inset: -5px; border-radius: 50%;
+    background:
+      repeating-conic-gradient(from -135deg, #4a4a4e 0deg 1.5deg, transparent 1.5deg 12deg);
+    -webkit-mask: radial-gradient(circle, transparent 60%, #000 61%);
+    mask: radial-gradient(circle, transparent 60%, #000 61%);
+  }
+  .knob-face {
+    position: absolute; inset: 0; border-radius: 50%;
+    background: radial-gradient(circle at 50% 35%, #ececf0 0%, #c2c2c6 42%, #86868a 74%, #4c4c50 100%);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.5), inset 0 -2px 3px rgba(0,0,0,0.3);
+    transform: rotate(-135deg);
+  }
+  .knob.small .knob-face {
+    background: radial-gradient(circle at 50% 35%, #2e2e32 0%, #1a1a1c 70%, #0a0a0c 100%);
+  }
+  .knob-mark {
+    position: absolute; top: 5px; left: 50%; width: 3px; height: 14px;
+    margin-left: -1.5px; border-radius: 2px; background: #1c1c1e;
+  }
+  .knob.small .knob-mark { top: 3px; height: 8px; background: #d0d0d4; }
+  .knob-top-lbl { font-size: 8px; color: #86868a; margin-bottom: 2px; letter-spacing: 1px; }
+
+  /* Switch FILTER / FILTER+TUNE */
+  .ds71-switch {
+    display: inline-flex; flex-direction: column; gap: 2px;
+    background: #0a0a0c; border: 1px solid #3a3a3e; border-radius: 5px;
+    padding: 4px 8px; cursor: pointer; font-size: 8px; letter-spacing: 0.5px;
+    font-weight: 700; line-height: 1.5;
+  }
+  .ds71-switch .sw-opt { color: #5a5a5e; display: flex; align-items: center; gap: 5px; }
+  .ds71-switch .sw-opt::before {
+    content: ""; width: 6px; height: 6px; border-radius: 50%; background: #2a2a2e;
+  }
+  .ds71-switch .sw-opt.on { color: #e8e8ea; }
+  .ds71-switch .sw-opt.on::before { background: var(--accent2); box-shadow: 0 0 5px var(--accent2); }
+
+  /* LEDs */
+  .ds71-led {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: #3a1010; box-shadow: inset 0 0 2px rgba(0,0,0,0.8); flex-shrink: 0;
+    transition: none;
+  }
+  .ds71-led.green { background: #103a18; }
+  .ds71-led-label { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; color: #a0a0a4; }
+
+  .ds71-bankrow { display: flex; justify-content: flex-end; margin: 14px 2px 4px; }
+  .ds71-bank {
+    display: flex; align-items: center; gap: 10px;
+    background: #0a0a0c; border: 1px solid #2a2a2e; border-radius: 8px; padding: 6px 10px;
+  }
+  .ds71-bank .bank-labels { display: flex; flex-direction: column; gap: 4px; }
+  .ds71-bank-btn {
+    width: 30px; height: 30px; border-radius: 50%; border: 1px solid #000;
+    background: radial-gradient(circle at 50% 35%, #d0d0d4, #86868a 70%, #4c4c50);
+    cursor: pointer; box-shadow: 0 2px 3px rgba(0,0,0,0.5);
+  }
+  .ds71-bank-btn:active { transform: translateY(1px); }
+  .ds71-bank-name { font-size: 8px; letter-spacing: 1px; color: #86868a; }
+
+  /* Pads (triggers) */
+  .ds71-pads {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px;
+  }
+  .ds71-pad {
+    background: linear-gradient(180deg, #2c2c30 0%, #141416 100%);
+    border: 1px solid #000; border-radius: 8px; padding: 8px 4px 12px;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    cursor: pointer; touch-action: none;
+    box-shadow: 0 3px 0 #000, inset 0 1px 0 rgba(255,255,255,0.05);
+    transition: transform 0.04s ease, box-shadow 0.04s ease, background 0.04s ease;
+  }
+  .ds71-pad .pad-wave { width: 100%; display: flex; justify-content: center;
+    border-bottom: 1px solid #3a3a3e; padding-bottom: 6px; }
+  .ds71-pad .pad-wave svg { width: 42px; height: 20px; }
+  .ds71-pad .pad-body {
+    width: 70%; height: 22px; border-radius: 4px;
+    background: linear-gradient(180deg, #3a3a40, #1c1c1e);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.6);
+  }
+  .ds71-pad.active, .ds71-pad:active {
+    transform: translateY(2px);
+    box-shadow: 0 1px 0 #000, inset 0 1px 0 rgba(255,255,255,0.05);
+    background: linear-gradient(180deg, #3a3a42 0%, #222 100%);
+  }
+  .ds71-pad.active .pad-body {
+    background: linear-gradient(180deg, var(--accent2), #b36b00);
+  }
+
+  .ds71-hint {
+    font-size: 12px; color: var(--text-secondary);
+    text-align: center; margin: 12px 0 0;
+  }
+  .ds71-guide ul { margin: 0; padding-left: 18px; }
+  .ds71-guide li {
+    font-size: 13px; color: var(--text); margin-bottom: 8px; line-height: 1.4;
+  }
+  .ds71-attribution {
+    font-size: 11px; color: var(--text-secondary); text-align: center;
+    margin: 4px 0 0; font-style: italic;
+  }
+
+  @media (max-width: 400px) {
+    .knob { width: 50px; height: 50px; }
+    .knob.big { width: 72px; height: 72px; }
+    .ds71-knobs { gap: 6px; }
+  }
 </style>
 </head>
 <body data-theme="light">
@@ -789,6 +959,7 @@
     <button class="module-tab" data-module="filters" data-i18n="tab_filters">Filtros</button>
     <button class="module-tab" data-module="sampling" data-i18n="tab_sampling">Muestreo</button>
     <button class="module-tab" data-module="stereo" data-i18n="tab_stereo">Estéreo</button>
+    <button class="module-tab" data-module="dubsiren" data-i18n="tab_dubsiren">Dub Siren</button>
   </div>
 
   <div class="module-view" id="module-generator">
@@ -1699,6 +1870,150 @@
       </div>
 
     </div>
+  </div>
+
+  <div class="module-view" id="module-dubsiren" hidden>
+    <div class="dub-heading-row">
+      <h2 data-i18n="dub_heading">Benidub DS71 · Dub Siren</h2>
+      <p data-i18n="dub_subtitle">Réplica jugable del pedal sintetizador de sirenas dub</p>
+    </div>
+
+    <div class="main-grid">
+      <!-- LEFT: el pedal -->
+      <div class="controls-col">
+        <div class="card ds71-card">
+          <div class="ds71-panel">
+
+            <div class="ds71-io">
+              <span>▼ 12VDC INPUT</span>
+              <span>Ext.TRIGGER ▼</span>
+              <span>OUTPUT ▲</span>
+            </div>
+
+            <div class="ds71-toprow">
+              <span class="ds71-header-lbl">TONE</span>
+              <div class="ds71-trims">
+                <div class="knob-wrap">
+                  <div class="knob small" id="dub-tone-knob" data-knob="tone"><div class="knob-face"><div class="knob-mark"></div></div></div>
+                </div>
+                <div class="knob-wrap">
+                  <div class="knob-top-lbl">TRIG.</div>
+                  <div class="knob small" id="dub-trigsens-knob" data-knob="trigsens"><div class="knob-face"><div class="knob-mark"></div></div></div>
+                </div>
+              </div>
+              <span class="ds71-header-lbl">MODULATION</span>
+            </div>
+
+            <div class="ds71-knobs">
+              <div class="knob-wrap">
+                <div class="knob" id="dub-volume-knob" data-knob="volume"><div class="knob-face"><div class="knob-mark"></div></div></div>
+                <div class="knob-name">VOLUME</div>
+                <div class="knob-ends"><span>0</span><span>10</span></div>
+              </div>
+              <div class="knob-wrap">
+                <div class="knob" id="dub-decay-knob" data-knob="decay"><div class="knob-face"><div class="knob-mark"></div></div></div>
+                <div class="knob-name">DECAY</div>
+                <div class="knob-ends"><span>SHORT</span><span>LONG</span></div>
+              </div>
+              <div class="knob-wrap">
+                <div class="knob" id="dub-depth-knob" data-knob="depth"><div class="knob-face"><div class="knob-mark"></div></div></div>
+                <div class="knob-name">DEPTH</div>
+                <div class="knob-ends"><span>MIN</span><span>MAX</span></div>
+              </div>
+            </div>
+
+            <div class="ds71-midrow">
+              <div class="ds71-switch" id="dub-filtermode">
+                <span class="sw-opt on" data-mode="filter">FILTER</span>
+                <span class="sw-opt" data-mode="filtertune">FILTER+TUNE</span>
+              </div>
+              <span class="ds71-led-label">LFO <span class="ds71-led" id="dub-led-rate"></span></span>
+            </div>
+
+            <div class="ds71-knobs">
+              <div class="knob-wrap">
+                <div class="knob" id="dub-tune-knob" data-knob="tune"><div class="knob-face"><div class="knob-mark"></div></div></div>
+                <div class="knob-name">TUNE</div>
+                <div class="knob-ends"><span>LOW</span><span>HIGH</span></div>
+              </div>
+              <div class="knob-wrap">
+                <div class="knob-top-lbl">FLAT</div>
+                <div class="knob big" id="dub-sweep-knob" data-knob="sweep"><div class="knob-face"><div class="knob-mark"></div></div></div>
+                <div class="knob-name">SWEEP</div>
+                <div class="knob-ends"><span>UP</span><span>DOWN</span></div>
+              </div>
+              <div class="knob-wrap">
+                <div class="knob" id="dub-rate-knob" data-knob="rate"><div class="knob-face"><div class="knob-mark"></div></div></div>
+                <div class="knob-name">RATE</div>
+                <div class="knob-ends"><span>SLOW</span><span>FAST</span></div>
+              </div>
+            </div>
+
+            <div class="ds71-bankrow">
+              <div class="ds71-bank">
+                <div class="bank-labels">
+                  <span class="ds71-led-label">A <span class="ds71-led green" id="dub-led-a"></span></span>
+                  <span class="ds71-led-label">B <span class="ds71-led green" id="dub-led-b"></span></span>
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+                  <button class="ds71-bank-btn" id="dub-bank-btn" aria-label="Bank select"></button>
+                  <span class="ds71-bank-name">BANK</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="ds71-pads" id="dub-pads">
+              <div class="ds71-pad" data-pad="0"><div class="pad-wave"></div><div class="pad-body"></div></div>
+              <div class="ds71-pad" data-pad="1"><div class="pad-wave"></div><div class="pad-body"></div></div>
+              <div class="ds71-pad" data-pad="2"><div class="pad-wave"></div><div class="pad-body"></div></div>
+              <div class="ds71-pad" data-pad="3"><div class="pad-wave"></div><div class="pad-body"></div></div>
+            </div>
+
+          </div>
+          <p class="ds71-hint" data-i18n="dub_play_hint">Mantén pulsado un pad — o las teclas 1, 2, 3, 4 — para disparar.</p>
+        </div>
+
+        <div class="card">
+          <p style="margin:0;font-size:13px;color:var(--text-secondary);line-height:1.5;" data-i18n="dub_intro">Un dub siren es un mini-sintetizador.</p>
+        </div>
+      </div>
+
+      <!-- RIGHT: visualizadores + guía -->
+      <div class="viz-col">
+        <div class="card viz-card">
+          <div class="viz-block">
+            <div class="viz-label">
+              <span data-i18n="dub_scope">Osciloscopio (salida)</span>
+            </div>
+            <canvas id="dub-oscilloscope" height="160"></canvas>
+          </div>
+          <div class="viz-block">
+            <div class="viz-label">
+              <span data-i18n="dub_spectrum">Espectro (FFT)</span>
+            </div>
+            <canvas id="dub-spectrum" height="160"></canvas>
+          </div>
+        </div>
+
+        <div class="card ds71-guide">
+          <h2 data-i18n="dub_guide_title">Guía de controles</h2>
+          <ul>
+            <li data-i18n="dub_g_triggers">Pads 1-4 — disparan el sonido y eligen la onda del LFO.</li>
+            <li data-i18n="dub_g_bank">BANK A/B — dos bancos de 4 ondas.</li>
+            <li data-i18n="dub_g_tune">TUNE — frecuencia base del oscilador.</li>
+            <li data-i18n="dub_g_sweep">SWEEP — barrido del filtro al soltar.</li>
+            <li data-i18n="dub_g_filtermode">FILTER / FILTER+TUNE — el barrido afecta al filtro o también al tono.</li>
+            <li data-i18n="dub_g_decay">DECAY — cuánto tarda en apagarse.</li>
+            <li data-i18n="dub_g_depth">DEPTH — profundidad del LFO.</li>
+            <li data-i18n="dub_g_rate">RATE — velocidad del LFO.</li>
+            <li data-i18n="dub_g_volume">VOLUME — nivel de salida.</li>
+            <li data-i18n="dub_g_tone">TONE — brillo general.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <p class="ds71-attribution" data-i18n="dub_attribution">Réplica educativa del pedal Benidub DS71.</p>
   </div>
 
   <footer class="app-footer">
