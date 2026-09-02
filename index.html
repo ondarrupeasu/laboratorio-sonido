@@ -1026,6 +1026,22 @@
   .smp-act:last-child { border-right: none; }
   .smp-act:hover { color: #e8e8ea; }
   .smp-rec.recording { color: var(--accent4); }
+  .smp-pad.armed { box-shadow: 0 0 0 2px var(--accent2), 0 3px 0 #000; }
+
+  /* Looper: transporte + reloj */
+  .lp-transport { display: flex; gap: 14px; align-items: center; }
+  .lp-controls { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .lp-row { display: flex; align-items: center; gap: 10px; }
+  .lp-row label { font-size: 11px; font-weight: 700; letter-spacing: 1px; color: #cfcfd2; width: 66px; flex-shrink: 0; }
+  .lp-row input[type="range"] { flex: 1; }
+  .lp-bpm-val { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; color: #e8e8ea; width: 30px; text-align: right; }
+  .lp-bars { display: flex; gap: 4px; flex: 1; }
+  .lp-bars button {
+    flex: 1; background: #0a0a0c; border: 1px solid #3a3a3e; border-radius: 6px;
+    color: #cfcfd2; font-size: 12px; font-weight: 600; padding: 6px 0; cursor: pointer; font-family: inherit;
+  }
+  .lp-bars button.active { border-color: var(--accent2); background: #241a06; color: #fff; }
+  #lp-clock { width: 120px; height: 120px; flex-shrink: 0; }
 
   @media (max-width: 400px) {
     .knob { width: 50px; height: 50px; }
@@ -2338,16 +2354,40 @@
     <div class="main-grid">
       <div class="controls-col">
         <div class="card ds71-card">
+          <div class="ds71-panel lp-transport">
+            <div class="lp-controls">
+              <button class="play-btn" id="lp-play-btn">
+                <span id="lp-play-icon">&#9658;</span>
+                <span id="lp-play-label" data-i18n="lp_play">Transporte</span>
+              </button>
+              <div class="lp-row">
+                <label data-i18n="lp_bpm">BPM</label>
+                <input type="range" id="lp-bpm" min="60" max="180" value="90" step="1">
+                <span class="lp-bpm-val" id="lp-bpm-val">90</span>
+              </div>
+              <div class="lp-row">
+                <label data-i18n="lp_bars">Compases</label>
+                <div class="lp-bars" id="lp-bars">
+                  <button data-bars="1">1</button><button data-bars="2" class="active">2</button><button data-bars="4">4</button><button data-bars="8">8</button>
+                </div>
+              </div>
+              <button class="rack-src-btn" id="lp-metro-btn" data-i18n="lp_metro">Metrónomo</button>
+            </div>
+            <canvas id="lp-clock" width="120" height="120"></canvas>
+          </div>
+        </div>
+
+        <div class="card ds71-card">
           <div class="ds71-panel">
             <div class="smp-pads" id="smp-pads">
-              <div class="smp-pad" data-pad="0"><div class="smp-pad-body"><span class="smp-pad-key">1</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-loop" title="Loop">&#8635;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
-              <div class="smp-pad" data-pad="1"><div class="smp-pad-body"><span class="smp-pad-key">2</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-loop" title="Loop">&#8635;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
-              <div class="smp-pad" data-pad="2"><div class="smp-pad-body"><span class="smp-pad-key">3</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-loop" title="Loop">&#8635;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
-              <div class="smp-pad" data-pad="3"><div class="smp-pad-body"><span class="smp-pad-key">4</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-loop" title="Loop">&#8635;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
-              <div class="smp-pad" data-pad="4"><div class="smp-pad-body"><span class="smp-pad-key">5</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-loop" title="Loop">&#8635;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
-              <div class="smp-pad" data-pad="5"><div class="smp-pad-body"><span class="smp-pad-key">6</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-loop" title="Loop">&#8635;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
-              <div class="smp-pad" data-pad="6"><div class="smp-pad-body"><span class="smp-pad-key">7</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-loop" title="Loop">&#8635;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
-              <div class="smp-pad" data-pad="7"><div class="smp-pad-body"><span class="smp-pad-key">8</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-loop" title="Loop">&#8635;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
+              <div class="smp-pad" data-pad="0"><div class="smp-pad-body"><span class="smp-pad-key">1</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
+              <div class="smp-pad" data-pad="1"><div class="smp-pad-body"><span class="smp-pad-key">2</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
+              <div class="smp-pad" data-pad="2"><div class="smp-pad-body"><span class="smp-pad-key">3</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
+              <div class="smp-pad" data-pad="3"><div class="smp-pad-body"><span class="smp-pad-key">4</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
+              <div class="smp-pad" data-pad="4"><div class="smp-pad-body"><span class="smp-pad-key">5</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
+              <div class="smp-pad" data-pad="5"><div class="smp-pad-body"><span class="smp-pad-key">6</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
+              <div class="smp-pad" data-pad="6"><div class="smp-pad-body"><span class="smp-pad-key">7</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
+              <div class="smp-pad" data-pad="7"><div class="smp-pad-body"><span class="smp-pad-key">8</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
             </div>
             <input type="file" id="smp-file-input" accept="audio/*" hidden>
           </div>

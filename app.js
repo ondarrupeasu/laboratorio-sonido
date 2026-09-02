@@ -3743,17 +3743,26 @@ function rackInit() {
 document.addEventListener("DOMContentLoaded", rackInit);
 
 
+
+
 /* ============================================================
-   ====== MÓDULO: SAMPLER ======
-   8 pads: graba del micro o carga audio, y dispara (clic o teclas 1-8).
+   ====== MÓDULO: LOOPER (sampler sincronizado a tempo) ======
+   8 pistas de loop sincronizadas: BPM + longitud en compases, count-in
+   con reloj visual, grabación cuantizada y loops que encajan a compás.
+   (Mantiene los ids smp-* del HTML y los nombres que usa el sistema de tabs.)
    ============================================================ */
 
 let smpAudioCtx = null, smpMaster = null, smpAnalyser = null, smpRafId = null, smpVisualRunning = false;
-const smpPads = Array.from({ length: 8 }, () => ({ buffer: null, name: null, loop: false }));
-const smpActiveSources = Array(8).fill(null);   // BufferSource sonando en bucle por pad
-let smpMediaStream = null, smpRecorder = null, smpRecChunks = [], smpRecPad = -1;
-let smpLoadTarget = -1;
+const smpPads = Array.from({ length: 8 }, () => ({ buffer: null, name: null, active: false, source: null }));
+let smpMediaStream = null, smpRecorder = null, smpRecChunks = [], smpRecPad = -1, smpLoadTarget = -1;
 
+// Transporte
+let lpBpm = 90, lpBars = 2, lpPlaying = false, lpMetro = true;
+let lpStartTime = 0, lpSchedTimer = null, lpNextBeat = 0, lpBeatCount = 0;
+let lpArmedPad = -1, lpRecStartTimer = null, lpRecStopTimer = null;
+
+function lpLoopLen() { return lpBars * 4 * 60 / lpBpm; }
+function lpBeatLen() { return 60 / lpBpm; }
 function smpPadEl(i) { return document.querySelector(`#smp-pads .smp-pad[data-pad="${i}"]`); }
 
 function smpEnsureContext() {
@@ -3770,48 +3779,144 @@ function smpEnsureContext() {
 function smpGetMic() {
   if (smpMediaStream) return Promise.resolve(smpMediaStream);
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.reject();
-  return navigator.mediaDevices.getUserMedia({ audio: true }).then(s => { smpMediaStream = s; return s; });
+  return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false } }).then(s => { smpMediaStream = s; return s; });
 }
 
-// Beep corto (count-in / avisos), directo a la salida
-function smpBeep(freq, dur) {
+/* ------ Transporte ------ */
+function lpNextLoopStart() {
+  const L = lpLoopLen(); let t = lpStartTime;
+  while (t < smpAudioCtx.currentTime + 0.03) t += L;
+  return t;
+}
+
+function lpStart() {
   smpEnsureContext();
-  const o = smpAudioCtx.createOscillator(), g = smpAudioCtx.createGain();
-  o.type = "sine"; o.frequency.value = freq;
-  o.connect(g); g.connect(smpAudioCtx.destination);
+  if (lpPlaying) return;
+  lpPlaying = true;
   const now = smpAudioCtx.currentTime;
-  g.gain.setValueAtTime(0.0001, now);
-  g.gain.exponentialRampToValueAtTime(0.25, now + 0.01);
-  g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-  o.start(now); o.stop(now + dur + 0.02);
+  lpStartTime = now; lpNextBeat = now; lpBeatCount = 0;
+  lpScheduler();
+  lpSchedTimer = setInterval(lpScheduler, 25);
+  smpPads.forEach((p, i) => { if (p.active && p.buffer) lpStartLoopSource(i, lpStartTime); });
+  smpStartVisual();
+  lpUpdatePlayBtn();
 }
 
-// Parar el bucle de un pad
-function smpStopPad(i) {
-  if (smpActiveSources[i]) { try { smpActiveSources[i].stop(); } catch (e) {} try { smpActiveSources[i].disconnect(); } catch (e) {} smpActiveSources[i] = null; }
-  const pad = smpPadEl(i); if (pad) pad.classList.remove("playing");
+function lpStop() {
+  lpPlaying = false;
+  if (lpSchedTimer) { clearInterval(lpSchedTimer); lpSchedTimer = null; }
+  smpPads.forEach((p, i) => lpStopLoopSource(i));
+  lpCancelRecord();
+  smpStopVisual(); smpClearCanvases();
+  lpUpdatePlayBtn();
 }
 
-// Disparar un pad (one-shot, o toggle de bucle si loop está activo)
+function lpScheduler() {
+  const ctx = smpAudioCtx, ahead = 0.12;
+  while (lpNextBeat < ctx.currentTime + ahead) {
+    if (lpMetro) lpClick(lpNextBeat, (lpBeatCount % (lpBars * 4)) === 0);
+    lpNextBeat += lpBeatLen(); lpBeatCount++;
+  }
+  while (ctx.currentTime - lpStartTime >= lpLoopLen()) lpStartTime += lpLoopLen();
+}
+
+function lpClick(time, accent) {
+  const o = smpAudioCtx.createOscillator(), g = smpAudioCtx.createGain();
+  o.frequency.value = accent ? 1500 : 900;
+  o.connect(g); g.connect(smpAudioCtx.destination);
+  g.gain.setValueAtTime(0.0001, time);
+  g.gain.exponentialRampToValueAtTime(accent ? 0.4 : 0.18, time + 0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
+  o.start(time); o.stop(time + 0.06);
+}
+
+/* ------ Loops ------ */
+function lpStartLoopSource(i, when) {
+  lpStopLoopSource(i);
+  const p = smpPads[i];
+  if (!p.buffer) return;
+  const src = smpAudioCtx.createBufferSource();
+  src.buffer = p.buffer; src.loop = true;
+  src.loopStart = 0; src.loopEnd = Math.min(p.buffer.duration, lpLoopLen());
+  src.connect(smpMaster);
+  src.start(when);
+  p.source = src;
+}
+function lpStopLoopSource(i) {
+  const p = smpPads[i];
+  if (p.source) { try { p.source.stop(); } catch (e) {} try { p.source.disconnect(); } catch (e) {} p.source = null; }
+}
+
+// Clic/tecla en un pad = activar/silenciar su loop (entra a compás)
 function smpPlayPad(i) {
   if (!smpPads[i].buffer) return;
   smpEnsureContext();
-  if (smpPads[i].loop) {
-    if (smpActiveSources[i]) { smpStopPad(i); return; }   // ya sonaba en bucle -> parar
-    const src = smpAudioCtx.createBufferSource();
-    src.buffer = smpPads[i].buffer; src.loop = true;
-    src.connect(smpMaster); src.start();
-    smpActiveSources[i] = src;
-    smpPadEl(i).classList.add("playing");
-  } else {
-    const src = smpAudioCtx.createBufferSource();
-    src.buffer = smpPads[i].buffer;
-    src.connect(smpMaster); src.start();
-    const pad = smpPadEl(i);
-    pad.classList.add("active");
-    setTimeout(() => pad.classList.remove("active"), 140);
-  }
-  if (!smpVisualRunning) smpStartVisual();
+  if (!lpPlaying) lpStart();
+  smpPads[i].active = !smpPads[i].active;
+  smpPadEl(i).classList.toggle("playing", smpPads[i].active);
+  if (smpPads[i].active) lpStartLoopSource(i, lpNextLoopStart());
+  else lpStopLoopSource(i);
+}
+
+/* ------ Grabación cuantizada ------ */
+function smpToggleRecord(i) {
+  if (lpArmedPad === i || smpRecPad === i) { lpCancelRecord(); return; }
+  smpEnsureContext();
+  if (!lpPlaying) lpStart();
+  smpGetMic().then(stream => {
+    lpArmedPad = i;
+    smpPadEl(i).classList.add("armed");
+    smpRecorder = new MediaRecorder(stream);
+    smpRecChunks = [];
+    smpRecorder.ondataavailable = e => { if (e.data.size) smpRecChunks.push(e.data); };
+    smpRecorder.onstop = () => lpFinishRecord(i);
+    const startAt = lpNextLoopStart();
+    const delayMs = Math.max(0, (startAt - smpAudioCtx.currentTime) * 1000);
+    lpRecStartTimer = setTimeout(() => {
+      if (lpArmedPad !== i) return;
+      smpRecorder.start();
+      smpRecPad = i; lpArmedPad = -1;
+      const pad = smpPadEl(i);
+      pad.classList.remove("armed"); pad.classList.add("recording");
+      pad.querySelector(".smp-rec").classList.add("recording");
+      const nameEl = pad.querySelector(".smp-pad-name");
+      nameEl.removeAttribute("data-i18n"); nameEl.textContent = t("smp_recording");
+      lpRecStopTimer = setTimeout(() => { if (smpRecorder && smpRecorder.state === "recording") smpRecorder.stop(); }, lpLoopLen() * 1000);
+    }, delayMs);
+  }).catch(() => {
+    const nameEl = smpPadEl(i).querySelector(".smp-pad-name");
+    nameEl.removeAttribute("data-i18n"); nameEl.textContent = t("smp_mic_denied");
+    lpArmedPad = -1; smpPadEl(i).classList.remove("armed");
+  });
+}
+
+function lpCancelRecord() {
+  clearTimeout(lpRecStartTimer); clearTimeout(lpRecStopTimer);
+  if (smpRecorder && smpRecorder.state === "recording") { try { smpRecorder.stop(); } catch (e) {} }
+  if (lpArmedPad >= 0) smpPadEl(lpArmedPad).classList.remove("armed");
+  lpArmedPad = -1;
+}
+
+function lpFinishRecord(i) {
+  const pad = smpPadEl(i);
+  pad.classList.remove("recording");
+  pad.querySelector(".smp-rec").classList.remove("recording");
+  const blob = new Blob(smpRecChunks, { type: smpRecorder.mimeType || "audio/webm" });
+  smpRecPad = -1;
+  blob.arrayBuffer()
+    .then(ab => smpAudioCtx.decodeAudioData(ab))
+    .then(buf => {
+      const L = lpLoopLen(), sr = buf.sampleRate, wanted = Math.floor(L * sr);
+      let out = buf;
+      if (buf.length > wanted) {
+        out = smpAudioCtx.createBuffer(buf.numberOfChannels, wanted, sr);
+        for (let ch = 0; ch < buf.numberOfChannels; ch++) out.getChannelData(ch).set(buf.getChannelData(ch).subarray(0, wanted));
+      }
+      smpAssign(i, out, "LOOP " + (i + 1));
+      smpPads[i].active = true; pad.classList.add("playing");
+      lpStartLoopSource(i, lpNextLoopStart());
+    })
+    .catch(() => {});
 }
 
 function smpAssign(i, buffer, name) {
@@ -3819,88 +3924,57 @@ function smpAssign(i, buffer, name) {
   const pad = smpPadEl(i);
   pad.classList.add("has-sample");
   const nameEl = pad.querySelector(".smp-pad-name");
-  nameEl.removeAttribute("data-i18n");
-  nameEl.textContent = name;
+  nameEl.removeAttribute("data-i18n"); nameEl.textContent = name;
 }
 
 function smpClearPad(i) {
-  smpStopPad(i);
-  smpPads[i] = { buffer: null, name: null, loop: false };
+  lpStopLoopSource(i);
+  smpPads[i] = { buffer: null, name: null, active: false, source: null };
   const pad = smpPadEl(i);
-  pad.classList.remove("has-sample");
-  pad.querySelector(".smp-loop").classList.remove("on");
+  pad.classList.remove("has-sample", "playing");
   const nameEl = pad.querySelector(".smp-pad-name");
-  nameEl.setAttribute("data-i18n", "smp_empty");
-  nameEl.textContent = t("smp_empty");
+  nameEl.setAttribute("data-i18n", "smp_empty"); nameEl.textContent = t("smp_empty");
 }
 
 function smpLoadFileFor(i, file) {
   smpEnsureContext();
   file.arrayBuffer()
     .then(ab => smpAudioCtx.decodeAudioData(ab))
-    .then(buf => smpAssign(i, buf, file.name))
+    .then(buf => { smpAssign(i, buf, file.name); if (lpPlaying) { smpPads[i].active = true; smpPadEl(i).classList.add("playing"); lpStartLoopSource(i, lpNextLoopStart()); } })
     .catch(() => {});
 }
 
-// Grabar del micro directamente en un pad (toggle)
-function smpToggleRecord(i) {
-  if (smpRecorder && smpRecorder.state === "recording") {
-    const wasPad = smpRecPad;
-    smpRecorder.stop();
-    if (wasPad === i) return;  // parar el mismo pad
-  }
-  smpEnsureContext();
-  smpGetMic().then(stream => {
-    smpRecChunks = []; smpRecPad = i;
-    smpRecorder = new MediaRecorder(stream);
-    smpRecorder.ondataavailable = e => { if (e.data.size) smpRecChunks.push(e.data); };
-    smpRecorder.onstop = () => {
-      smpBeep(523, 0.1);   // beep de fin
-      const pad = smpPadEl(smpRecPad);
-      pad.classList.remove("recording");
-      pad.querySelector(".smp-rec").classList.remove("recording");
-      const blob = new Blob(smpRecChunks, { type: smpRecorder.mimeType || "audio/webm" });
-      const padIdx = smpRecPad; smpRecPad = -1;
-      blob.arrayBuffer()
-        .then(ab => smpAudioCtx.decodeAudioData(ab))
-        .then(buf => smpAssign(padIdx, buf, "REC " + (padIdx + 1)))
-        .catch(() => {});
-    };
-    // Count-in: beep y, un pelín después, empieza a grabar (para que el beep no entre)
-    smpBeep(880, 0.12);
-    const pad = smpPadEl(i);
-    const nameEl = pad.querySelector(".smp-pad-name");
-    nameEl.removeAttribute("data-i18n");
-    nameEl.textContent = "…";
-    setTimeout(() => {
-      if (smpRecPad !== i || !smpRecorder) return;
-      smpRecorder.start();
-      pad.classList.add("recording");
-      pad.querySelector(".smp-rec").classList.add("recording");
-      nameEl.textContent = t("smp_recording");
-    }, 170);
-  }).catch(() => {
-    const nameEl = smpPadEl(i).querySelector(".smp-pad-name");
-    nameEl.removeAttribute("data-i18n");
-    nameEl.textContent = t("smp_mic_denied");
-  });
-}
-
-function smpClearCanvases() {
-  const c = document.getElementById("smp-oscilloscope");
-  if (!c) return;
+/* ------ Visual (osciloscopio + reloj) ------ */
+function lpDrawClock(pos, countdown, beat) {
+  const c = document.getElementById("lp-clock"); if (!c) return;
   const { ctx, width, height } = setupCanvas(c);
-  ctx.clearRect(0, 0, width, height); drawGrid(ctx, width, height);
+  ctx.clearRect(0, 0, width, height);
+  const cx = width / 2, cy = height / 2, r = Math.min(cx, cy) - 5;
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+  ctx.strokeStyle = getCssVar("--grid-line"); ctx.lineWidth = 3; ctx.stroke();
+  const col = countdown != null ? getCssVar("--accent4") : getCssVar("--accent3");
+  ctx.beginPath(); ctx.moveTo(cx, cy);
+  ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * pos); ctx.closePath();
+  ctx.globalAlpha = 0.28; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = 1;
+  ctx.fillStyle = getCssVar("--text"); ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.font = "700 22px -apple-system, sans-serif";
+  ctx.fillText(countdown != null ? String(countdown) : String(beat), cx, cy);
 }
 
 function smpStartVisual() {
-  const setup = setupCanvas(document.getElementById("smp-oscilloscope"));
-  const timeData = new Uint8Array(smpAnalyser.fftSize);
   smpVisualRunning = true;
+  const oscSetup = setupCanvas(document.getElementById("smp-oscilloscope"));
+  const timeData = new Uint8Array(smpAnalyser.fftSize);
   function draw() {
     if (!smpVisualRunning) return;
     smpAnalyser.getByteTimeDomainData(timeData);
-    drawOscilloscope(setup.ctx, setup.width, setup.height, timeData);
+    drawOscilloscope(oscSetup.ctx, oscSetup.width, oscSetup.height, timeData);
+    const L = lpLoopLen();
+    const pos = lpPlaying ? (((smpAudioCtx.currentTime - lpStartTime) % L) / L) : 0;
+    let countdown = null;
+    if (lpArmedPad >= 0) { const next = lpNextLoopStart(); countdown = Math.max(1, Math.ceil((next - smpAudioCtx.currentTime) / lpBeatLen())); }
+    const beat = (Math.floor(pos * lpBars * 4) % (lpBars * 4)) + 1;
+    lpDrawClock(pos, countdown, beat);
     smpRafId = requestAnimationFrame(draw);
   }
   draw();
@@ -3911,44 +3985,70 @@ function smpStopVisual() {
   if (smpRafId) cancelAnimationFrame(smpRafId);
 }
 
-function smpOnLeave() {
-  if (smpRecorder && smpRecorder.state === "recording") { try { smpRecorder.stop(); } catch (e) {} }
-  for (let i = 0; i < 8; i++) smpStopPad(i);   // parar bucles
-  smpStopVisual();
-  smpClearCanvases();
+function smpClearCanvases() {
+  const c = document.getElementById("smp-oscilloscope");
+  if (c) { const { ctx, width, height } = setupCanvas(c); ctx.clearRect(0, 0, width, height); drawGrid(ctx, width, height); }
+  lpDrawClock(0, null, 1);
 }
 
+function smpOnLeave() { lpStop(); }
+
+function lpUpdatePlayBtn() {
+  const btn = document.getElementById("lp-play-btn");
+  if (!btn) return;
+  btn.classList.toggle("playing", lpPlaying);
+  document.getElementById("lp-play-icon").innerHTML = lpPlaying ? "&#9632;" : "&#9658;";
+  document.getElementById("lp-play-label").textContent = lpPlaying ? t("rack_stop") : t("lp_play");
+}
+
+/* ------ Controles ------ */
 function initSamplerControls() {
   document.querySelectorAll("#smp-pads .smp-pad").forEach(pad => {
     const i = parseInt(pad.dataset.pad, 10);
     pad.querySelector(".smp-pad-body").addEventListener("pointerdown", e => { e.preventDefault(); smpPlayPad(i); });
     pad.querySelector(".smp-rec").addEventListener("click", () => smpToggleRecord(i));
-    pad.querySelector(".smp-loop").addEventListener("click", () => {
-      smpPads[i].loop = !smpPads[i].loop;
-      pad.querySelector(".smp-loop").classList.toggle("on", smpPads[i].loop);
-      if (!smpPads[i].loop && smpActiveSources[i]) smpStopPad(i);   // al quitar loop, parar
-    });
-    pad.querySelector(".smp-load").addEventListener("click", () => {
-      smpLoadTarget = i;
-      document.getElementById("smp-file-input").click();
-    });
+    pad.querySelector(".smp-load").addEventListener("click", () => { smpLoadTarget = i; document.getElementById("smp-file-input").click(); });
     pad.querySelector(".smp-clear").addEventListener("click", () => smpClearPad(i));
   });
-
   document.getElementById("smp-file-input").addEventListener("change", e => {
-    if (e.target.files && e.target.files[0] && smpLoadTarget >= 0) {
-      smpLoadFileFor(smpLoadTarget, e.target.files[0]);
-    }
+    if (e.target.files && e.target.files[0] && smpLoadTarget >= 0) smpLoadFileFor(smpLoadTarget, e.target.files[0]);
     e.target.value = "";
   });
 
-  // Teclas 1-8 (solo cuando la pestaña está visible)
+  // Transporte
+  document.getElementById("lp-play-btn").addEventListener("click", () => { if (lpPlaying) lpStop(); else lpStart(); });
+  const bpm = document.getElementById("lp-bpm");
+  bpm.addEventListener("input", () => {
+    lpBpm = parseInt(bpm.value, 10);
+    document.getElementById("lp-bpm-val").textContent = lpBpm;
+    lpResyncActive();
+  });
+  document.querySelectorAll("#lp-bars button").forEach(b => {
+    b.addEventListener("click", () => {
+      lpBars = parseInt(b.dataset.bars, 10);
+      document.querySelectorAll("#lp-bars button").forEach(x => x.classList.toggle("active", x === b));
+      lpResyncActive();
+    });
+  });
+  const metro = document.getElementById("lp-metro-btn");
+  metro.classList.add("active");
+  metro.addEventListener("click", () => { lpMetro = !lpMetro; metro.classList.toggle("active", lpMetro); });
+
+  // Teclas 1-8
   document.addEventListener("keydown", e => {
     const view = document.getElementById("module-sampler");
     if (!view || view.hidden || e.repeat) return;
     const idx = ["1", "2", "3", "4", "5", "6", "7", "8"].indexOf(e.key);
     if (idx >= 0) { e.preventDefault(); smpPlayPad(idx); }
   });
+}
+
+// Al cambiar BPM/compases, re-sincroniza los loops que estén sonando
+function lpResyncActive() {
+  if (!lpPlaying) return;
+  lpStartTime = smpAudioCtx.currentTime;
+  const next = lpNextLoopStart();
+  smpPads.forEach((p, i) => { if (p.active && p.buffer) lpStartLoopSource(i, next); });
 }
 
 function samplerInit() {
