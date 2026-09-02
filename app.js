@@ -3256,7 +3256,10 @@ let rackSourceGain = null;
 let rackToneOsc = null, rackBufferSrc = null, rackBuffer = null;
 let rackEcho = null, rackPhase = null, rackSpring = null;
 let rackModules = [];       // efectos en orden dentro de la cadena
+let rackOrder = ["echo", "phase", "spring"];  // orden actual de la cadena
+const rackCardByKey = {};
 const rackBypass = { echo: false, phase: false, spring: false };
+let rackMicStream = null, rackMicSource = null;
 let rackBackbone = false;   // grafo fijo creado
 let rackIsPlaying = false;  // hay generador sonando
 let rackRafId = null;
@@ -3387,13 +3390,25 @@ function makeRackSpring(ctx) {
   };
 }
 
-// Conecta la cadena en el orden de rackModules
+function rackModuleByKey(k) { return k === "echo" ? rackEcho : k === "phase" ? rackPhase : rackSpring; }
+
+// Conecta la cadena en el orden actual (rackOrder)
 function rackReconnect() {
   try { rackSourceGain.disconnect(); } catch (e) {}
-  rackModules.forEach(m => { try { m.output.disconnect(); } catch (e) {} });
+  rackOrder.forEach(k => { const m = rackModuleByKey(k); if (m) { try { m.output.disconnect(); } catch (e) {} } });
   let prev = rackSourceGain;
-  for (const m of rackModules) { prev.connect(m.input); prev = m.output; }
+  for (const k of rackOrder) { const m = rackModuleByKey(k); prev.connect(m.input); prev = m.output; }
   prev.connect(rackMaster);
+}
+
+// Reordena un módulo en la cadena (dir = -1 arriba, +1 abajo)
+function rackMoveModule(key, dir) {
+  const i = rackOrder.indexOf(key), j = i + dir;
+  if (i < 0 || j < 0 || j >= rackOrder.length) return;
+  rackOrder[i] = rackOrder[j]; rackOrder[j] = key;
+  const parent = rackCardByKey[rackOrder[0]].parentNode;
+  rackOrder.forEach(k => parent.appendChild(rackCardByKey[k]));  // reordena las cards
+  if (rackBackbone) rackReconnect();
 }
 
 function rackBuildBackbone() {
@@ -3424,12 +3439,16 @@ function rackBuildBackbone() {
 function rackStopGenerator() {
   if (rackToneOsc) { try { rackToneOsc.stop(); } catch (e) {} try { rackToneOsc.disconnect(); } catch (e) {} rackToneOsc = null; }
   if (rackBufferSrc) { try { rackBufferSrc.stop(); } catch (e) {} try { rackBufferSrc.disconnect(); } catch (e) {} rackBufferSrc = null; }
+  if (rackMicSource) { try { rackMicSource.disconnect(); } catch (e) {} rackMicSource = null; }
 }
 
 function rackStartGenerator() {
   const ctx = rackAudioCtx;
   rackStopGenerator();
-  if (rackState.sourceType === "file" && rackBuffer) {
+  if (rackState.sourceType === "mic" && rackMicStream) {
+    rackMicSource = ctx.createMediaStreamSource(rackMicStream);
+    rackMicSource.connect(rackSourceGain);
+  } else if (rackState.sourceType === "file" && rackBuffer) {
     rackBufferSrc = ctx.createBufferSource();
     rackBufferSrc.buffer = rackBuffer;
     rackBufferSrc.loop = true;
@@ -3501,12 +3520,32 @@ function rackStartVisualLoop() {
 }
 
 // Cambiar tipo de fuente
+function rackUpdateSourceButtons() {
+  document.getElementById("rack-tone-btn").classList.toggle("active", rackState.sourceType === "tone");
+  const fileLabel = document.querySelector('label[for="rack-file-input"]');
+  if (fileLabel) fileLabel.classList.toggle("active", rackState.sourceType === "file");
+  const mic = document.getElementById("rack-mic-btn");
+  if (mic) mic.classList.toggle("active", rackState.sourceType === "mic");
+}
+
 function rackSetSource(type) {
   rackState.sourceType = type;
-  document.getElementById("rack-tone-btn").classList.toggle("active", type === "tone");
-  const fileLabel = document.querySelector('label[for="rack-file-input"]');
-  if (fileLabel) fileLabel.classList.toggle("active", type === "file");
+  rackUpdateSourceButtons();
   if (rackIsPlaying) rackStartGenerator();
+}
+
+// Micrófono (pide permiso; guarda el stream para reutilizar)
+function rackEnableMic() {
+  rackEnsureContext();
+  if (rackMicStream) { rackSetSource("mic"); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+  navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } })
+    .then(stream => { rackMicStream = stream; rackSetSource("mic"); })
+    .catch(() => {
+      const el = document.getElementById("rack-filename");
+      el.removeAttribute("data-i18n");
+      el.textContent = "⚠ micrófono no disponible";
+    });
 }
 
 // Cargar archivo de audio
@@ -3541,6 +3580,26 @@ function initRackControls() {
   document.getElementById("rack-tone-btn").addEventListener("click", () => rackSetSource("tone"));
   document.getElementById("rack-file-input").addEventListener("change", e => {
     if (e.target.files && e.target.files[0]) rackLoadFile(e.target.files[0]);
+  });
+  const micBtn = document.getElementById("rack-mic-btn");
+  if (micBtn) micBtn.addEventListener("click", () => rackEnableMic());
+
+  // Reordenar módulos: botones ▲▼ en cada cabecera
+  ["echo", "phase", "spring"].forEach(key => {
+    const card = document.querySelector(`#module-rack [data-effect="${key}"]`);
+    if (!card) return;
+    rackCardByKey[key] = card;
+    const head = card.querySelector(".rack-module-head");
+    const bypass = head.querySelector(".rack-bypass");
+    const ctrl = document.createElement("div");
+    ctrl.className = "rack-reorder";
+    ctrl.innerHTML = '<button data-dir="-1" aria-label="subir">&#9650;</button><button data-dir="1" aria-label="bajar">&#9660;</button>';
+    const right = document.createElement("div");
+    right.style.display = "flex"; right.style.alignItems = "center"; right.style.gap = "8px";
+    right.appendChild(ctrl); right.appendChild(bypass);
+    head.appendChild(right);
+    ctrl.querySelectorAll("button").forEach(b =>
+      b.addEventListener("click", () => rackMoveModule(key, parseInt(b.dataset.dir, 10))));
   });
 
   // Bypass de cada módulo (recuerda el estado aunque aún no exista el grafo)

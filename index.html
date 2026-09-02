@@ -979,6 +979,13 @@
   }
   .rack-bypass:not(.on)::before { background: #30d158; box-shadow: 0 0 5px #30d158; }
   .rack-bypass.on { border-color: var(--accent4); color: var(--accent4); }
+  .rack-reorder { display: flex; flex-direction: column; gap: 1px; }
+  .rack-reorder button {
+    background: #0a0a0c; border: 1px solid #3a3a3e; color: #a0a0a4;
+    font-size: 8px; line-height: 1; width: 20px; height: 13px; cursor: pointer;
+    padding: 0; border-radius: 3px; font-family: inherit;
+  }
+  .rack-reorder button:hover { color: #fff; border-color: var(--accent2); }
 
   @media (max-width: 400px) {
     .knob { width: 50px; height: 50px; }
@@ -2098,6 +2105,7 @@
               <button class="rack-src-btn active" id="rack-tone-btn" data-i18n="rack_test_tone">Tono de prueba</button>
               <label class="rack-src-btn" for="rack-file-input" data-i18n="rack_load_audio">Cargar audio…</label>
               <input type="file" id="rack-file-input" accept="audio/*" hidden>
+              <button class="rack-src-btn" id="rack-mic-btn" data-i18n="rack_mic">Micrófono</button>
             </div>
             <div class="rack-filename" id="rack-filename" data-i18n="rack_no_file">Sin archivo</div>
             <button class="play-btn" id="rack-play-btn">
@@ -2108,7 +2116,7 @@
         </div>
 
         <!-- DIGITAL ECHO -->
-        <div class="card ds71-card">
+        <div class="card ds71-card" data-effect="echo">
           <div class="ds71-panel">
             <div class="rack-module-head">
               <span class="rack-module-name">DIGITAL ECHO</span>
@@ -2152,7 +2160,7 @@
         </div>
 
         <!-- PHASE -->
-        <div class="card ds71-card">
+        <div class="card ds71-card" data-effect="phase">
           <div class="ds71-panel">
             <div class="rack-module-head">
               <span class="rack-module-name">PHASE</span>
@@ -2186,7 +2194,7 @@
         </div>
 
         <!-- SPRING AMP III -->
-        <div class="card ds71-card">
+        <div class="card ds71-card" data-effect="spring">
           <div class="ds71-panel">
             <div class="rack-module-head">
               <span class="rack-module-name">SPRING AMP III</span>
