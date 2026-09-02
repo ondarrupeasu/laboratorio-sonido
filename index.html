@@ -995,6 +995,36 @@
   .rack-wave-btn.active { border-color: var(--accent2); background: #241a06; }
   .rack-wave-btn svg { width: 26px; height: 16px; display: block; }
 
+  /* Sampler */
+  .smp-pads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .smp-pad {
+    background: linear-gradient(180deg, #2c2c30 0%, #141416 100%);
+    border: 1px solid #000; border-radius: 8px; overflow: hidden;
+    box-shadow: 0 3px 0 #000, inset 0 1px 0 rgba(255,255,255,0.05);
+    display: flex; flex-direction: column;
+  }
+  .smp-pad-body {
+    flex: 1; min-height: 62px; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 5px; cursor: pointer; padding: 10px 4px;
+    transition: background 0.05s ease;
+  }
+  .smp-pad.active .smp-pad-body { background: rgba(255,159,10,0.18); }
+  .smp-pad-key { font-size: 10px; color: #6a6a6e; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .smp-pad-name {
+    font-size: 11px; color: #86868a; text-align: center; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .smp-pad.has-sample .smp-pad-name { color: #e8e8ea; font-weight: 600; }
+  .smp-pad.recording { box-shadow: 0 0 0 2px var(--accent4), 0 3px 0 #000; }
+  .smp-pad-actions { display: flex; border-top: 1px solid #000; }
+  .smp-act {
+    flex: 1; background: #0a0a0c; border: none; border-right: 1px solid #000;
+    color: #7a7a7e; font-size: 11px; padding: 6px 0; cursor: pointer; font-family: inherit;
+  }
+  .smp-act:last-child { border-right: none; }
+  .smp-act:hover { color: #e8e8ea; }
+  .smp-rec.recording { color: var(--accent4); }
+
   @media (max-width: 400px) {
     .knob { width: 50px; height: 50px; }
     .knob.big { width: 72px; height: 72px; }
@@ -1029,6 +1059,7 @@
     <button class="module-tab" data-module="stereo" data-i18n="tab_stereo">Estéreo</button>
     <button class="module-tab" data-module="dubsiren" data-i18n="tab_dubsiren">Dub Siren</button>
     <button class="module-tab" data-module="rack" data-i18n="tab_rack">Rack</button>
+    <button class="module-tab" data-module="sampler" data-i18n="tab_sampler">Sampler</button>
   </div>
 
   <div class="module-view" id="module-generator">
@@ -2294,6 +2325,55 @@
     </div>
 
     <p class="ds71-attribution" data-i18n="rack_attribution">Prototipo educativo inspirado en Benidub.</p>
+  </div>
+
+  <div class="module-view" id="module-sampler" hidden>
+    <div class="dub-heading-row">
+      <h2 data-i18n="smp_heading">Sampler</h2>
+      <p data-i18n="smp_subtitle">Graba, carga y dispara tus propios sonidos</p>
+    </div>
+
+    <div class="main-grid">
+      <div class="controls-col">
+        <div class="card ds71-card">
+          <div class="ds71-panel">
+            <div class="smp-pads" id="smp-pads">
+              <div class="smp-pad" data-pad="0"><div class="smp-pad-body"><span class="smp-pad-key">1</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
+              <div class="smp-pad" data-pad="1"><div class="smp-pad-body"><span class="smp-pad-key">2</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
+              <div class="smp-pad" data-pad="2"><div class="smp-pad-body"><span class="smp-pad-key">3</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
+              <div class="smp-pad" data-pad="3"><div class="smp-pad-body"><span class="smp-pad-key">4</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
+              <div class="smp-pad" data-pad="4"><div class="smp-pad-body"><span class="smp-pad-key">5</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
+              <div class="smp-pad" data-pad="5"><div class="smp-pad-body"><span class="smp-pad-key">6</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
+              <div class="smp-pad" data-pad="6"><div class="smp-pad-body"><span class="smp-pad-key">7</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
+              <div class="smp-pad" data-pad="7"><div class="smp-pad-body"><span class="smp-pad-key">8</span><span class="smp-pad-name" data-i18n="smp_empty">vacío</span></div><div class="smp-pad-actions"><button class="smp-act smp-rec" title="Grabar">&#9679;</button><button class="smp-act smp-load" title="Cargar">&#9650;</button><button class="smp-act smp-clear" title="Vaciar">&#10005;</button></div></div>
+            </div>
+            <input type="file" id="smp-file-input" accept="audio/*" hidden>
+          </div>
+          <p class="ds71-hint" data-i18n="smp_hint">Toca un pad para sonar; ● graba, ▲ carga, ✕ vacía. Teclas 1-8.</p>
+        </div>
+
+        <div class="card">
+          <p style="margin:0;font-size:13px;color:var(--text-secondary);line-height:1.5;" data-i18n="smp_intro">Graba tu voz o ruidos y crea.</p>
+        </div>
+      </div>
+
+      <div class="viz-col">
+        <div class="card viz-card">
+          <div class="viz-block">
+            <div class="viz-label"><span data-i18n="smp_scope">Osciloscopio (salida)</span></div>
+            <canvas id="smp-oscilloscope" height="160"></canvas>
+          </div>
+        </div>
+        <div class="card ds71-guide">
+          <h2 data-i18n="smp_guide_title">Cómo funciona</h2>
+          <ul>
+            <li data-i18n="smp_g_rec">● Graba del micrófono en el pad.</li>
+            <li data-i18n="smp_g_load">▲ Carga un archivo de audio en el pad.</li>
+            <li data-i18n="smp_g_play">Toca el pad (o su tecla 1-8) para reproducir.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
   </div>
 
   <footer class="app-footer">

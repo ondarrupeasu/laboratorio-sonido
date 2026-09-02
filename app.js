@@ -572,6 +572,9 @@ function initControls() {
     if (rackIsPlaying) {
       rackClearCanvases();
     }
+    if (smpVisualRunning) {
+      smpClearCanvases();
+    }
   });
 
   // Cambio de módulo (tabs)
@@ -641,6 +644,9 @@ function initControls() {
       if (target !== "rack" && rackIsPlaying) {
         rackStop();
       }
+      if (target !== "sampler") {
+        smpOnLeave();
+      }
 
       if (target === "dual") {
         setTimeout(() => dualClearCanvases(), 50);
@@ -658,6 +664,8 @@ function initControls() {
         setTimeout(() => dubClearCanvases(), 50);
       } else if (target === "rack") {
         setTimeout(() => rackClearCanvases(), 50);
+      } else if (target === "sampler") {
+        setTimeout(() => smpClearCanvases(), 50);
       } else if (target === "generator" && !isPlaying) {
         setTimeout(() => clearCanvases(), 50);
       }
@@ -3733,3 +3741,176 @@ function rackInit() {
 }
 
 document.addEventListener("DOMContentLoaded", rackInit);
+
+
+/* ============================================================
+   ====== MÓDULO: SAMPLER ======
+   8 pads: graba del micro o carga audio, y dispara (clic o teclas 1-8).
+   ============================================================ */
+
+let smpAudioCtx = null, smpMaster = null, smpAnalyser = null, smpRafId = null, smpVisualRunning = false;
+const smpPads = Array.from({ length: 8 }, () => ({ buffer: null, name: null }));
+let smpMediaStream = null, smpRecorder = null, smpRecChunks = [], smpRecPad = -1;
+let smpLoadTarget = -1;
+
+function smpPadEl(i) { return document.querySelector(`#smp-pads .smp-pad[data-pad="${i}"]`); }
+
+function smpEnsureContext() {
+  if (!smpAudioCtx) {
+    smpAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    smpMaster = smpAudioCtx.createGain(); smpMaster.gain.value = 0.9;
+    smpAnalyser = smpAudioCtx.createAnalyser(); smpAnalyser.fftSize = 2048;
+    smpMaster.connect(smpAnalyser);
+    smpMaster.connect(smpAudioCtx.destination);
+  }
+  if (smpAudioCtx.state === "suspended") smpAudioCtx.resume();
+}
+
+function smpGetMic() {
+  if (smpMediaStream) return Promise.resolve(smpMediaStream);
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return Promise.reject();
+  return navigator.mediaDevices.getUserMedia({ audio: true }).then(s => { smpMediaStream = s; return s; });
+}
+
+// Disparar un pad (reproduce su sample una vez)
+function smpPlayPad(i) {
+  if (!smpPads[i].buffer) return;
+  smpEnsureContext();
+  const src = smpAudioCtx.createBufferSource();
+  src.buffer = smpPads[i].buffer;
+  src.connect(smpMaster);
+  src.start();
+  const pad = smpPadEl(i);
+  pad.classList.add("active");
+  setTimeout(() => pad.classList.remove("active"), 140);
+  if (!smpVisualRunning) smpStartVisual();
+}
+
+function smpAssign(i, buffer, name) {
+  smpPads[i].buffer = buffer; smpPads[i].name = name;
+  const pad = smpPadEl(i);
+  pad.classList.add("has-sample");
+  const nameEl = pad.querySelector(".smp-pad-name");
+  nameEl.removeAttribute("data-i18n");
+  nameEl.textContent = name;
+}
+
+function smpClearPad(i) {
+  smpPads[i] = { buffer: null, name: null };
+  const pad = smpPadEl(i);
+  pad.classList.remove("has-sample");
+  const nameEl = pad.querySelector(".smp-pad-name");
+  nameEl.setAttribute("data-i18n", "smp_empty");
+  nameEl.textContent = t("smp_empty");
+}
+
+function smpLoadFileFor(i, file) {
+  smpEnsureContext();
+  file.arrayBuffer()
+    .then(ab => smpAudioCtx.decodeAudioData(ab))
+    .then(buf => smpAssign(i, buf, file.name))
+    .catch(() => {});
+}
+
+// Grabar del micro directamente en un pad (toggle)
+function smpToggleRecord(i) {
+  if (smpRecorder && smpRecorder.state === "recording") {
+    const wasPad = smpRecPad;
+    smpRecorder.stop();
+    if (wasPad === i) return;  // parar el mismo pad
+  }
+  smpEnsureContext();
+  smpGetMic().then(stream => {
+    smpRecChunks = []; smpRecPad = i;
+    smpRecorder = new MediaRecorder(stream);
+    smpRecorder.ondataavailable = e => { if (e.data.size) smpRecChunks.push(e.data); };
+    smpRecorder.onstop = () => {
+      const pad = smpPadEl(smpRecPad);
+      pad.classList.remove("recording");
+      pad.querySelector(".smp-rec").classList.remove("recording");
+      const blob = new Blob(smpRecChunks, { type: smpRecorder.mimeType || "audio/webm" });
+      const padIdx = smpRecPad; smpRecPad = -1;
+      blob.arrayBuffer()
+        .then(ab => smpAudioCtx.decodeAudioData(ab))
+        .then(buf => smpAssign(padIdx, buf, "REC " + (padIdx + 1)))
+        .catch(() => {});
+    };
+    smpRecorder.start();
+    const pad = smpPadEl(i);
+    pad.classList.add("recording");
+    pad.querySelector(".smp-rec").classList.add("recording");
+    const nameEl = pad.querySelector(".smp-pad-name");
+    nameEl.removeAttribute("data-i18n");
+    nameEl.textContent = t("smp_recording");
+  }).catch(() => {
+    const nameEl = smpPadEl(i).querySelector(".smp-pad-name");
+    nameEl.removeAttribute("data-i18n");
+    nameEl.textContent = t("smp_mic_denied");
+  });
+}
+
+function smpClearCanvases() {
+  const c = document.getElementById("smp-oscilloscope");
+  if (!c) return;
+  const { ctx, width, height } = setupCanvas(c);
+  ctx.clearRect(0, 0, width, height); drawGrid(ctx, width, height);
+}
+
+function smpStartVisual() {
+  const setup = setupCanvas(document.getElementById("smp-oscilloscope"));
+  const timeData = new Uint8Array(smpAnalyser.fftSize);
+  smpVisualRunning = true;
+  function draw() {
+    if (!smpVisualRunning) return;
+    smpAnalyser.getByteTimeDomainData(timeData);
+    drawOscilloscope(setup.ctx, setup.width, setup.height, timeData);
+    smpRafId = requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+function smpStopVisual() {
+  smpVisualRunning = false;
+  if (smpRafId) cancelAnimationFrame(smpRafId);
+}
+
+function smpOnLeave() {
+  if (smpRecorder && smpRecorder.state === "recording") { try { smpRecorder.stop(); } catch (e) {} }
+  smpStopVisual();
+  smpClearCanvases();
+}
+
+function initSamplerControls() {
+  document.querySelectorAll("#smp-pads .smp-pad").forEach(pad => {
+    const i = parseInt(pad.dataset.pad, 10);
+    pad.querySelector(".smp-pad-body").addEventListener("pointerdown", e => { e.preventDefault(); smpPlayPad(i); });
+    pad.querySelector(".smp-rec").addEventListener("click", () => smpToggleRecord(i));
+    pad.querySelector(".smp-load").addEventListener("click", () => {
+      smpLoadTarget = i;
+      document.getElementById("smp-file-input").click();
+    });
+    pad.querySelector(".smp-clear").addEventListener("click", () => smpClearPad(i));
+  });
+
+  document.getElementById("smp-file-input").addEventListener("change", e => {
+    if (e.target.files && e.target.files[0] && smpLoadTarget >= 0) {
+      smpLoadFileFor(smpLoadTarget, e.target.files[0]);
+    }
+    e.target.value = "";
+  });
+
+  // Teclas 1-8 (solo cuando la pestaña está visible)
+  document.addEventListener("keydown", e => {
+    const view = document.getElementById("module-sampler");
+    if (!view || view.hidden || e.repeat) return;
+    const idx = ["1", "2", "3", "4", "5", "6", "7", "8"].indexOf(e.key);
+    if (idx >= 0) { e.preventDefault(); smpPlayPad(idx); }
+  });
+}
+
+function samplerInit() {
+  initSamplerControls();
+  setTimeout(() => smpClearCanvases(), 50);
+}
+
+document.addEventListener("DOMContentLoaded", samplerInit);
