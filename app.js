@@ -569,6 +569,9 @@ function initControls() {
     if (dubIsPlaying) {
       dubClearCanvases();
     }
+    if (rackIsPlaying) {
+      rackClearCanvases();
+    }
   });
 
   // Cambio de módulo (tabs)
@@ -635,6 +638,9 @@ function initControls() {
       if (target !== "dubsiren" && dubIsPlaying) {
         dubStopTone();
       }
+      if (target !== "rack" && rackIsPlaying) {
+        rackStop();
+      }
 
       if (target === "dual") {
         setTimeout(() => dualClearCanvases(), 50);
@@ -650,6 +656,8 @@ function initControls() {
         setTimeout(() => stereoClearCanvases(), 50);
       } else if (target === "dubsiren") {
         setTimeout(() => dubClearCanvases(), 50);
+      } else if (target === "rack") {
+        setTimeout(() => rackClearCanvases(), 50);
       } else if (target === "generator" && !isPlaying) {
         setTimeout(() => clearCanvases(), 50);
       }
@@ -3206,3 +3214,248 @@ function dubInit() {
 }
 
 document.addEventListener("DOMContentLoaded", dubInit);
+
+
+/* ============================================================
+   ====== MÓDULO: RACK MULTIEFECTO (inspirado en Benidub) ======
+   Fuente (tono/archivo) -> Digital Echo -> master -> analizadores -> salida
+   Prototipo v1 (fase A1). Próximo: Phase, Spring, fuente DS71 y micro.
+   ============================================================ */
+
+let rackAudioCtx = null, rackMaster = null, rackAnalyserTime = null, rackAnalyserFreq = null;
+let rackSourceGain = null;
+let rackToneOsc = null, rackBufferSrc = null, rackBuffer = null;
+let rackEcho = null;
+let rackBackbone = false;   // grafo fijo creado
+let rackIsPlaying = false;  // hay generador sonando
+let rackRafId = null;
+const rackState = { sourceType: "tone" };
+
+const rackEchoDefaults = { time: 0.42, fb: 0.38, mix: 0.42, hp: 0.15, lp: 0.78, mod: 0.15 };
+
+function rackEnsureContext() {
+  if (!rackAudioCtx) rackAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (rackAudioCtx.state === "suspended") rackAudioCtx.resume();
+}
+
+// Fábrica del Digital Echo: módulo con input/output y bypass
+function makeRackEcho(ctx) {
+  const input = ctx.createGain(), output = ctx.createGain();
+  const bypassGain = ctx.createGain(); bypassGain.gain.value = 0;   // efecto activo
+  const activeGain = ctx.createGain(); activeGain.gain.value = 1;
+  const dry = ctx.createGain(), wet = ctx.createGain();
+  const delay = ctx.createDelay(2.0);
+  const fb = ctx.createGain();
+  const hp = ctx.createBiquadFilter(); hp.type = "highpass";
+  const lp = ctx.createBiquadFilter(); lp.type = "lowpass";
+  const lfo = ctx.createOscillator(); const lfoGain = ctx.createGain();
+
+  // valores por defecto (coinciden con los knobs)
+  delay.delayTime.value = dubExpMap(rackEchoDefaults.time, 0.07, 1.2);
+  fb.gain.value = 0.92 * rackEchoDefaults.fb;
+  dry.gain.value = 1 - rackEchoDefaults.mix;
+  wet.gain.value = rackEchoDefaults.mix;
+  hp.frequency.value = dubExpMap(rackEchoDefaults.hp, 20, 2000);
+  lp.frequency.value = dubExpMap(rackEchoDefaults.lp, 200, 16000);
+  lfo.type = "sine"; lfo.frequency.value = 0.4;
+  lfoGain.gain.value = 0.006 * rackEchoDefaults.mod;
+
+  // enrutado
+  input.connect(bypassGain); bypassGain.connect(output);   // camino bypass
+  input.connect(dry); dry.connect(activeGain);             // dry
+  input.connect(delay);                                    // wet
+  delay.connect(hp); hp.connect(lp);
+  lp.connect(wet); wet.connect(activeGain);
+  lp.connect(fb); fb.connect(delay);                       // realimentación (con filtros)
+  activeGain.connect(output);
+  lfo.connect(lfoGain); lfoGain.connect(delay.delayTime);  // wow
+  lfo.start();
+
+  return {
+    input, output, nodes: { delay, fb, hp, lp, lfo, lfoGain, dry, wet },
+    bypassed: false,
+    setBypass(b) { this.bypassed = b; bypassGain.gain.value = b ? 1 : 0; activeGain.gain.value = b ? 0 : 1; }
+  };
+}
+
+function rackBuildBackbone() {
+  if (rackBackbone) return;
+  rackEnsureContext();
+  const ctx = rackAudioCtx;
+  rackSourceGain = ctx.createGain(); rackSourceGain.gain.value = 0.9;
+  rackMaster = ctx.createGain(); rackMaster.gain.value = 0.9;
+  rackAnalyserTime = ctx.createAnalyser(); rackAnalyserTime.fftSize = 2048;
+  rackAnalyserFreq = ctx.createAnalyser(); rackAnalyserFreq.fftSize = 2048;
+  rackEcho = makeRackEcho(ctx);
+
+  // cadena: fuente -> echo -> master -> analizadores + salida
+  rackSourceGain.connect(rackEcho.input);
+  rackEcho.output.connect(rackMaster);
+  rackMaster.connect(rackAnalyserTime);
+  rackMaster.connect(rackAnalyserFreq);
+  rackMaster.connect(ctx.destination);
+  rackBackbone = true;
+}
+
+function rackStopGenerator() {
+  if (rackToneOsc) { try { rackToneOsc.stop(); } catch (e) {} try { rackToneOsc.disconnect(); } catch (e) {} rackToneOsc = null; }
+  if (rackBufferSrc) { try { rackBufferSrc.stop(); } catch (e) {} try { rackBufferSrc.disconnect(); } catch (e) {} rackBufferSrc = null; }
+}
+
+function rackStartGenerator() {
+  const ctx = rackAudioCtx;
+  rackStopGenerator();
+  if (rackState.sourceType === "file" && rackBuffer) {
+    rackBufferSrc = ctx.createBufferSource();
+    rackBufferSrc.buffer = rackBuffer;
+    rackBufferSrc.loop = true;
+    rackBufferSrc.connect(rackSourceGain);
+    rackBufferSrc.start();
+  } else {
+    // tono de prueba (sierra 220 Hz, nivel moderado)
+    rackToneOsc = ctx.createOscillator();
+    rackToneOsc.type = "sawtooth";
+    rackToneOsc.frequency.value = 220;
+    const g = ctx.createGain(); g.gain.value = 0.25;
+    rackToneOsc.connect(g); g.connect(rackSourceGain);
+    rackToneOsc.start();
+  }
+}
+
+function rackPlay() {
+  rackEnsureContext();
+  rackBuildBackbone();
+  rackStartGenerator();
+  rackIsPlaying = true;
+  rackUpdatePlayButton();
+  rackStartVisualLoop();
+}
+
+function rackStop() {
+  rackStopGenerator();
+  rackIsPlaying = false;
+  rackUpdatePlayButton();
+  if (rackRafId) cancelAnimationFrame(rackRafId);
+  rackClearCanvases();
+}
+
+function rackTeardown() {
+  rackStop();
+  // el backbone se conserva entre visitas a la pestaña; solo paramos el sonido
+}
+
+function rackUpdatePlayButton() {
+  const btn = document.getElementById("rack-play-btn");
+  if (!btn) return;
+  btn.classList.toggle("playing", rackIsPlaying);
+  document.getElementById("rack-play-icon").innerHTML = rackIsPlaying ? "&#9632;" : "&#9658;";
+  document.getElementById("rack-play-label").textContent = rackIsPlaying ? t("rack_stop") : t("rack_play");
+}
+
+function rackClearCanvases() {
+  ["rack-oscilloscope", "rack-spectrum"].forEach(id => {
+    const c = document.getElementById(id); if (!c) return;
+    const { ctx, width, height } = setupCanvas(c);
+    ctx.clearRect(0, 0, width, height); drawGrid(ctx, width, height);
+  });
+}
+
+function rackStartVisualLoop() {
+  const oscSetup = setupCanvas(document.getElementById("rack-oscilloscope"));
+  const fftSetup = setupCanvas(document.getElementById("rack-spectrum"));
+  const timeData = new Uint8Array(rackAnalyserTime.fftSize);
+  const freqData = new Uint8Array(rackAnalyserFreq.frequencyBinCount);
+  function draw() {
+    if (!rackIsPlaying) return;
+    rackAnalyserTime.getByteTimeDomainData(timeData);
+    drawOscilloscope(oscSetup.ctx, oscSetup.width, oscSetup.height, timeData);
+    rackAnalyserFreq.getByteFrequencyData(freqData);
+    drawSpectrum(fftSetup.ctx, fftSetup.width, fftSetup.height, freqData);
+    rackRafId = requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+// Cambiar tipo de fuente
+function rackSetSource(type) {
+  rackState.sourceType = type;
+  document.getElementById("rack-tone-btn").classList.toggle("active", type === "tone");
+  const fileLabel = document.querySelector('label[for="rack-file-input"]');
+  if (fileLabel) fileLabel.classList.toggle("active", type === "file");
+  if (rackIsPlaying) rackStartGenerator();
+}
+
+// Cargar archivo de audio
+function rackLoadFile(file) {
+  rackEnsureContext();
+  const reader = new FileReader();
+  reader.onload = () => {
+    rackAudioCtx.decodeAudioData(reader.result)
+      .then(buf => {
+        rackBuffer = buf;
+        const el = document.getElementById("rack-filename");
+        el.removeAttribute("data-i18n");
+        el.textContent = file.name;
+        rackSetSource("file");
+      })
+      .catch(() => {
+        const el = document.getElementById("rack-filename");
+        el.removeAttribute("data-i18n");
+        el.textContent = "⚠ " + file.name;
+      });
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function initRackControls() {
+  // Botón reproducir/parar
+  document.getElementById("rack-play-btn").addEventListener("click", () => {
+    if (rackIsPlaying) rackStop(); else rackPlay();
+  });
+
+  // Selector de fuente
+  document.getElementById("rack-tone-btn").addEventListener("click", () => rackSetSource("tone"));
+  document.getElementById("rack-file-input").addEventListener("change", e => {
+    if (e.target.files && e.target.files[0]) rackLoadFile(e.target.files[0]);
+  });
+
+  // Bypass del Echo
+  const bypassBtn = document.getElementById("rack-echo-bypass");
+  bypassBtn.addEventListener("click", () => {
+    const b = !(rackEcho && rackEcho.bypassed);
+    if (rackEcho) rackEcho.setBypass(b);
+    bypassBtn.classList.toggle("on", b);
+  });
+
+  // Knobs del Echo (los nodos existen tras rackBuildBackbone; guardas por si aún no)
+  const D = rackEchoDefaults;
+  makeDubKnob(document.getElementById("rack-echo-time-knob"), D.time, n => {
+    if (rackEcho) rackEcho.nodes.delay.delayTime.setTargetAtTime(dubExpMap(n, 0.07, 1.2), rackAudioCtx.currentTime, 0.03);
+  });
+  makeDubKnob(document.getElementById("rack-echo-fb-knob"), D.fb, n => {
+    if (rackEcho) rackEcho.nodes.fb.gain.setTargetAtTime(0.92 * n, rackAudioCtx.currentTime, 0.02);
+  });
+  makeDubKnob(document.getElementById("rack-echo-mix-knob"), D.mix, n => {
+    if (rackEcho) {
+      const now = rackAudioCtx.currentTime;
+      rackEcho.nodes.dry.gain.setTargetAtTime(1 - n, now, 0.02);
+      rackEcho.nodes.wet.gain.setTargetAtTime(n, now, 0.02);
+    }
+  });
+  makeDubKnob(document.getElementById("rack-echo-hp-knob"), D.hp, n => {
+    if (rackEcho) rackEcho.nodes.hp.frequency.setTargetAtTime(dubExpMap(n, 20, 2000), rackAudioCtx.currentTime, 0.02);
+  });
+  makeDubKnob(document.getElementById("rack-echo-lp-knob"), D.lp, n => {
+    if (rackEcho) rackEcho.nodes.lp.frequency.setTargetAtTime(dubExpMap(n, 200, 16000), rackAudioCtx.currentTime, 0.02);
+  });
+  makeDubKnob(document.getElementById("rack-echo-depth-knob"), D.mod, n => {
+    if (rackEcho) rackEcho.nodes.lfoGain.gain.setTargetAtTime(0.006 * n, rackAudioCtx.currentTime, 0.02);
+  });
+}
+
+function rackInit() {
+  initRackControls();
+  setTimeout(() => rackClearCanvases(), 50);
+}
+
+document.addEventListener("DOMContentLoaded", rackInit);

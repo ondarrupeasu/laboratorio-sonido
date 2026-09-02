@@ -937,6 +937,45 @@
     margin: 4px 0 0; font-style: italic;
   }
 
+  /* Rack multiefecto */
+  .rack-module-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .rack-module-name {
+    font-size: 12px; font-weight: 700; letter-spacing: 1.5px;
+    color: #cfcfd2; text-transform: uppercase;
+    border: 1px solid #4a4a4e; border-radius: 3px; padding: 3px 9px;
+  }
+  .rack-io-tag {
+    font-size: 9px; letter-spacing: 1px; color: #6a6a6e;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  .rack-source-controls { display: flex; gap: 8px; margin: 10px 0; flex-wrap: wrap; }
+  .rack-src-btn {
+    background: #0a0a0c; border: 1px solid #3a3a3e; border-radius: 7px;
+    padding: 9px 12px; color: #cfcfd2; font-size: 12px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+  }
+  .rack-src-btn.active { border-color: var(--accent2); color: #fff; background: #241a06; }
+  .rack-filename {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px;
+    color: #86868a; margin-bottom: 12px; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .rack-bypass {
+    background: transparent; border: 1px solid #4a4a4e; border-radius: 5px;
+    padding: 4px 10px; color: #86868a; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; font-family: inherit;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .rack-bypass::before {
+    content: ""; width: 7px; height: 7px; border-radius: 50%; background: #103a18;
+    box-shadow: inset 0 0 2px rgba(0,0,0,0.8);
+  }
+  .rack-bypass:not(.on)::before { background: #30d158; box-shadow: 0 0 5px #30d158; }
+  .rack-bypass.on { border-color: var(--accent4); color: var(--accent4); }
+
   @media (max-width: 400px) {
     .knob { width: 50px; height: 50px; }
     .knob.big { width: 72px; height: 72px; }
@@ -970,6 +1009,7 @@
     <button class="module-tab" data-module="sampling" data-i18n="tab_sampling">Muestreo</button>
     <button class="module-tab" data-module="stereo" data-i18n="tab_stereo">Estéreo</button>
     <button class="module-tab" data-module="dubsiren" data-i18n="tab_dubsiren">Dub Siren</button>
+    <button class="module-tab" data-module="rack" data-i18n="tab_rack">Rack</button>
   </div>
 
   <div class="module-view" id="module-generator">
@@ -2031,6 +2071,107 @@
     </div>
 
     <p class="ds71-attribution" data-i18n="dub_attribution">Réplica educativa del pedal Benidub DS71.</p>
+  </div>
+
+  <div class="module-view" id="module-rack" hidden>
+    <div class="dub-heading-row">
+      <h2 data-i18n="rack_heading">Rack de efectos dub</h2>
+      <p data-i18n="rack_subtitle">Encadena efectos y patchea tu sonido</p>
+    </div>
+
+    <div class="main-grid">
+      <div class="controls-col">
+
+        <!-- FUENTE -->
+        <div class="card ds71-card">
+          <div class="ds71-panel">
+            <div class="rack-module-head">
+              <span class="rack-module-name" data-i18n="rack_source">Fuente</span>
+              <span class="rack-io-tag">OUT ▸</span>
+            </div>
+            <p class="ds71-hint" style="margin-top:0;text-align:left;" data-i18n="rack_source_hint">Usa el tono de prueba o carga un audio.</p>
+            <div class="rack-source-controls">
+              <button class="rack-src-btn active" id="rack-tone-btn" data-i18n="rack_test_tone">Tono de prueba</button>
+              <label class="rack-src-btn" for="rack-file-input" data-i18n="rack_load_audio">Cargar audio…</label>
+              <input type="file" id="rack-file-input" accept="audio/*" hidden>
+            </div>
+            <div class="rack-filename" id="rack-filename" data-i18n="rack_no_file">Sin archivo</div>
+            <button class="play-btn" id="rack-play-btn">
+              <span id="rack-play-icon">&#9658;</span>
+              <span id="rack-play-label" data-i18n="rack_play">Reproducir</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- DIGITAL ECHO -->
+        <div class="card ds71-card">
+          <div class="ds71-panel">
+            <div class="rack-module-head">
+              <span class="rack-module-name">DIGITAL ECHO</span>
+              <button class="rack-bypass" id="rack-echo-bypass" data-i18n="rack_bypass">Bypass</button>
+            </div>
+            <div class="ds71-knobs">
+              <div class="knob-wrap">
+                <div class="knob" id="rack-echo-time-knob"><div class="knob-face"><div class="knob-mark"></div></div></div>
+                <div class="knob-name">TIME</div>
+                <div class="knob-ends"><span>70ms</span><span>1.2s</span></div>
+              </div>
+              <div class="knob-wrap">
+                <div class="knob" id="rack-echo-fb-knob"><div class="knob-face"><div class="knob-mark"></div></div></div>
+                <div class="knob-name">FEEDBACK</div>
+                <div class="knob-ends"><span>0</span><span>MAX</span></div>
+              </div>
+              <div class="knob-wrap">
+                <div class="knob" id="rack-echo-mix-knob"><div class="knob-face"><div class="knob-mark"></div></div></div>
+                <div class="knob-name">MIX</div>
+                <div class="knob-ends"><span>DRY</span><span>WET</span></div>
+              </div>
+            </div>
+            <div class="ds71-knobs" style="margin-top:12px;">
+              <div class="knob-wrap">
+                <div class="knob" id="rack-echo-hp-knob"><div class="knob-face"><div class="knob-mark"></div></div></div>
+                <div class="knob-name">HP</div>
+                <div class="knob-ends"><span>LOW</span><span>HIGH</span></div>
+              </div>
+              <div class="knob-wrap">
+                <div class="knob" id="rack-echo-lp-knob"><div class="knob-face"><div class="knob-mark"></div></div></div>
+                <div class="knob-name">LP</div>
+                <div class="knob-ends"><span>LOW</span><span>HIGH</span></div>
+              </div>
+              <div class="knob-wrap">
+                <div class="knob" id="rack-echo-depth-knob"><div class="knob-face"><div class="knob-mark"></div></div></div>
+                <div class="knob-name">MOD</div>
+                <div class="knob-ends"><span>0</span><span>MAX</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="viz-col">
+        <div class="card viz-card">
+          <div class="viz-block">
+            <div class="viz-label"><span data-i18n="rack_scope">Osciloscopio (salida del rack)</span></div>
+            <canvas id="rack-oscilloscope" height="160"></canvas>
+          </div>
+          <div class="viz-block">
+            <div class="viz-label"><span data-i18n="rack_spectrum">Espectro (FFT)</span></div>
+            <canvas id="rack-spectrum" height="160"></canvas>
+          </div>
+        </div>
+        <div class="card ds71-guide">
+          <h2 data-i18n="rack_guide_title">Cómo funciona</h2>
+          <ul>
+            <li data-i18n="rack_g_source">Fuente — el sonido de partida.</li>
+            <li data-i18n="rack_g_echo">Digital Echo — delay con realimentación y filtros.</li>
+            <li data-i18n="rack_g_bypass">Bypass — desactiva un efecto sin quitarlo.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <p class="ds71-attribution" data-i18n="rack_attribution">Prototipo educativo inspirado en Benidub.</p>
   </div>
 
   <footer class="app-footer">
