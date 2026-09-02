@@ -986,6 +986,14 @@
     padding: 0; border-radius: 3px; font-family: inherit;
   }
   .rack-reorder button:hover { color: #fff; border-color: var(--accent2); }
+  #rack-siren-panel { margin-top: 14px; border-top: 1px solid #2a2a2e; padding-top: 12px; }
+  .rack-siren-waves { display: flex; gap: 6px; margin-bottom: 12px; }
+  .rack-wave-btn {
+    flex: 1; background: #0a0a0c; border: 1px solid #3a3a3e; border-radius: 6px;
+    padding: 6px; cursor: pointer; display: flex; justify-content: center; align-items: center;
+  }
+  .rack-wave-btn.active { border-color: var(--accent2); background: #241a06; }
+  .rack-wave-btn svg { width: 26px; height: 16px; display: block; }
 
   @media (max-width: 400px) {
     .knob { width: 50px; height: 50px; }
@@ -2106,12 +2114,39 @@
               <label class="rack-src-btn" for="rack-file-input" data-i18n="rack_load_audio">Cargar audio…</label>
               <input type="file" id="rack-file-input" accept="audio/*" hidden>
               <button class="rack-src-btn" id="rack-mic-btn" data-i18n="rack_mic">Micrófono</button>
+              <button class="rack-src-btn" id="rack-siren-btn" data-i18n="rack_siren">Sirena</button>
             </div>
             <div class="rack-filename" id="rack-filename" data-i18n="rack_no_file">Sin archivo</div>
             <button class="play-btn" id="rack-play-btn">
               <span id="rack-play-icon">&#9658;</span>
               <span id="rack-play-label" data-i18n="rack_play">Reproducir</span>
             </button>
+
+            <div id="rack-siren-panel" hidden>
+              <div class="rack-siren-waves" id="rack-siren-waves">
+                <button class="rack-wave-btn active" data-wave="sine"></button>
+                <button class="rack-wave-btn" data-wave="triangle"></button>
+                <button class="rack-wave-btn" data-wave="square"></button>
+                <button class="rack-wave-btn" data-wave="sawtooth"></button>
+              </div>
+              <div class="ds71-knobs">
+                <div class="knob-wrap">
+                  <div class="knob" id="rack-siren-tune-knob"><div class="knob-face"><div class="knob-mark"></div></div></div>
+                  <div class="knob-name">TUNE</div>
+                  <div class="knob-ends"><span>LOW</span><span>HIGH</span></div>
+                </div>
+                <div class="knob-wrap">
+                  <div class="knob" id="rack-siren-rate-knob"><div class="knob-face"><div class="knob-mark"></div></div></div>
+                  <div class="knob-name">RATE</div>
+                  <div class="knob-ends"><span>SLOW</span><span>FAST</span></div>
+                </div>
+                <div class="knob-wrap">
+                  <div class="knob" id="rack-siren-depth-knob"><div class="knob-face"><div class="knob-mark"></div></div></div>
+                  <div class="knob-name">DEPTH</div>
+                  <div class="knob-ends"><span>0</span><span>MAX</span></div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 

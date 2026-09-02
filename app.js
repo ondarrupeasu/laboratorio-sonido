@@ -3260,7 +3260,13 @@ let rackOrder = ["echo", "phase", "spring"];  // orden actual de la cadena
 const rackCardByKey = {};
 const rackBypass = { echo: false, phase: false, spring: false };
 let rackMicStream = null, rackMicSource = null;
+let rackSirenVco = null, rackSirenLfo = null, rackSirenLfoGain = null;
+const rackSirenState = { tune: 0.5, rate: 0.35, depth: 0.4, wave: "sine" };
 let rackBackbone = false;   // grafo fijo creado
+
+function rackSirenFreq() { return dubExpMap(rackSirenState.tune, 80, 2500); }
+function rackSirenRateHz() { return dubExpMap(rackSirenState.rate, 0.1, 12); }
+function rackSirenDepthHz() { return rackSirenState.depth * rackSirenFreq() * 0.9; }
 let rackIsPlaying = false;  // hay generador sonando
 let rackRafId = null;
 const rackState = { sourceType: "tone" };
@@ -3440,12 +3446,25 @@ function rackStopGenerator() {
   if (rackToneOsc) { try { rackToneOsc.stop(); } catch (e) {} try { rackToneOsc.disconnect(); } catch (e) {} rackToneOsc = null; }
   if (rackBufferSrc) { try { rackBufferSrc.stop(); } catch (e) {} try { rackBufferSrc.disconnect(); } catch (e) {} rackBufferSrc = null; }
   if (rackMicSource) { try { rackMicSource.disconnect(); } catch (e) {} rackMicSource = null; }
+  if (rackSirenVco) { try { rackSirenVco.stop(); } catch (e) {} try { rackSirenVco.disconnect(); } catch (e) {} rackSirenVco = null; }
+  if (rackSirenLfo) { try { rackSirenLfo.stop(); } catch (e) {} try { rackSirenLfo.disconnect(); } catch (e) {} rackSirenLfo = null; }
+  rackSirenLfoGain = null;
 }
 
 function rackStartGenerator() {
   const ctx = rackAudioCtx;
   rackStopGenerator();
-  if (rackState.sourceType === "mic" && rackMicStream) {
+  if (rackState.sourceType === "siren") {
+    rackSirenVco = ctx.createOscillator(); rackSirenVco.type = "sawtooth";
+    rackSirenVco.frequency.value = rackSirenFreq();
+    rackSirenLfo = ctx.createOscillator(); rackSirenLfo.type = rackSirenState.wave;
+    rackSirenLfo.frequency.value = rackSirenRateHz();
+    rackSirenLfoGain = ctx.createGain(); rackSirenLfoGain.gain.value = rackSirenDepthHz();
+    const g = ctx.createGain(); g.gain.value = 0.3;
+    rackSirenLfo.connect(rackSirenLfoGain); rackSirenLfoGain.connect(rackSirenVco.frequency);
+    rackSirenVco.connect(g); g.connect(rackSourceGain);
+    rackSirenVco.start(); rackSirenLfo.start();
+  } else if (rackState.sourceType === "mic" && rackMicStream) {
     rackMicSource = ctx.createMediaStreamSource(rackMicStream);
     rackMicSource.connect(rackSourceGain);
   } else if (rackState.sourceType === "file" && rackBuffer) {
@@ -3526,6 +3545,10 @@ function rackUpdateSourceButtons() {
   if (fileLabel) fileLabel.classList.toggle("active", rackState.sourceType === "file");
   const mic = document.getElementById("rack-mic-btn");
   if (mic) mic.classList.toggle("active", rackState.sourceType === "mic");
+  const siren = document.getElementById("rack-siren-btn");
+  if (siren) siren.classList.toggle("active", rackState.sourceType === "siren");
+  const sirenPanel = document.getElementById("rack-siren-panel");
+  if (sirenPanel) sirenPanel.hidden = rackState.sourceType !== "siren";
 }
 
 function rackSetSource(type) {
@@ -3583,6 +3606,33 @@ function initRackControls() {
   });
   const micBtn = document.getElementById("rack-mic-btn");
   if (micBtn) micBtn.addEventListener("click", () => rackEnableMic());
+  const sirenBtn = document.getElementById("rack-siren-btn");
+  if (sirenBtn) sirenBtn.addEventListener("click", () => rackSetSource("siren"));
+
+  // Sirena: selector de onda del LFO + knobs
+  const sirenWaves = document.getElementById("rack-siren-waves");
+  if (sirenWaves) {
+    sirenWaves.querySelectorAll(".rack-wave-btn").forEach(btn => {
+      btn.innerHTML = dubWaveSVG(btn.dataset.wave);
+      btn.addEventListener("click", () => {
+        rackSirenState.wave = btn.dataset.wave;
+        sirenWaves.querySelectorAll(".rack-wave-btn").forEach(b => b.classList.toggle("active", b === btn));
+        if (rackSirenLfo) rackSirenLfo.type = rackSirenState.wave;
+      });
+    });
+  }
+  makeDubKnob(document.getElementById("rack-siren-tune-knob"), rackSirenState.tune, n => {
+    rackSirenState.tune = n;
+    if (rackSirenVco) { const now = rackAudioCtx.currentTime; rackSirenVco.frequency.setTargetAtTime(rackSirenFreq(), now, 0.02); rackSirenLfoGain.gain.setTargetAtTime(rackSirenDepthHz(), now, 0.02); }
+  }, n => { const f = dubExpMap(n, 80, 2500); return f >= 1000 ? (f / 1000).toFixed(2) + " kHz" : Math.round(f) + " Hz"; });
+  makeDubKnob(document.getElementById("rack-siren-rate-knob"), rackSirenState.rate, n => {
+    rackSirenState.rate = n;
+    if (rackSirenLfo) rackSirenLfo.frequency.setTargetAtTime(rackSirenRateHz(), rackAudioCtx.currentTime, 0.02);
+  }, n => dubExpMap(n, 0.1, 12).toFixed(2) + " Hz");
+  makeDubKnob(document.getElementById("rack-siren-depth-knob"), rackSirenState.depth, n => {
+    rackSirenState.depth = n;
+    if (rackSirenLfoGain) rackSirenLfoGain.gain.setTargetAtTime(rackSirenDepthHz(), rackAudioCtx.currentTime, 0.02);
+  }, n => Math.round(n * 100) + " %");
 
   // Reordenar módulos: botones ▲▼ en cada cabecera
   ["echo", "phase", "spring"].forEach(key => {
