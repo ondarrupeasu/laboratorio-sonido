@@ -3907,10 +3907,23 @@ function lpFinishRecord(i) {
     .then(ab => smpAudioCtx.decodeAudioData(ab))
     .then(buf => {
       const L = lpLoopLen(), sr = buf.sampleRate, wanted = Math.floor(L * sr);
-      let out = buf;
-      if (buf.length > wanted) {
-        out = smpAudioCtx.createBuffer(buf.numberOfChannels, wanted, sr);
-        for (let ch = 0; ch < buf.numberOfChannels; ch++) out.getChannelData(ch).set(buf.getChannelData(ch).subarray(0, wanted));
+      // Buffer MONO de duración exacta al compás. Mono se reparte a L+R (centrado);
+      // así se evita que el micro (mono grabado en estéreo) suene solo por un canal.
+      const out = smpAudioCtx.createBuffer(1, wanted, sr);
+      const dst = out.getChannelData(0);
+      const nCh = buf.numberOfChannels;
+      const copyN = Math.min(buf.length, wanted);
+      if (nCh === 1) {
+        dst.set(buf.getChannelData(0).subarray(0, copyN));
+      } else {
+        // elegir el canal con más energía (el micro mono suele dejar el otro vacío)
+        let best = 0, bestE = -1;
+        for (let ch = 0; ch < nCh; ch++) {
+          const c = buf.getChannelData(ch); let e = 0;
+          for (let n = 0; n < copyN; n += 64) e += c[n] * c[n];
+          if (e > bestE) { bestE = e; best = ch; }
+        }
+        dst.set(buf.getChannelData(best).subarray(0, copyN));
       }
       smpAssign(i, out, "LOOP " + (i + 1));
       smpPads[i].active = true; pad.classList.add("playing");
