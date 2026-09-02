@@ -517,10 +517,10 @@ function initControls() {
   // Tema claro/oscuro
   const themeToggle = document.getElementById("theme-toggle");
   themeToggle.addEventListener("click", () => {
-    const body = document.body;
-    const current = body.getAttribute("data-theme");
+    const root = document.documentElement;
+    const current = root.getAttribute("data-theme");
     const next = current === "dark" ? "light" : "dark";
-    body.setAttribute("data-theme", next);
+    root.setAttribute("data-theme", next);
     document.getElementById("theme-icon").innerHTML = next === "dark" ? "&#9789;" : "&#9728;";
     if (isPlaying) {
       // redraw grid colors immediately
