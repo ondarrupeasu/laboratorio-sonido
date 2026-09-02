@@ -2769,6 +2769,7 @@ let dubIsPlaying = false;   // grafo vivo (osciladores corriendo)
 let dubHeld = false;        // hay un pad/tecla mantenido
 let dubHeldPad = null;
 let dubLatchedPad = null;   // pad fijado (modo latch)
+let dubDroning = false;     // sonando en modo DECAY ∞ tras soltar
 let dubRafId = null;
 
 const dubState = {
@@ -2788,7 +2789,7 @@ const dubState = {
 // Alterna un pad: dispara o para según el modo de disparo
 function dubPadToggle(idx) {
   if (dubState.triggerMode === "latch") {
-    if (dubLatchedPad === idx) { dubRelease(); dubLatchedPad = null; }
+    if (dubLatchedPad === idx) { dubRelease(true); dubLatchedPad = null; }
     else { dubTrigger(idx); dubLatchedPad = idx; }
   } else {
     dubTrigger(idx);
@@ -2931,6 +2932,7 @@ function dubTrigger(padIndex) {
   dubVca.gain.linearRampToValueAtTime(peak, now + 0.008);
 
   dubHeld = true;
+  dubDroning = false;
   dubHeldPad = padIndex;
 
   // Marca visual del pad
@@ -2940,12 +2942,26 @@ function dubTrigger(padIndex) {
 }
 
 // Suelta: decay + barrido de filtro (y de tono si FILTER+TUNE)
-function dubRelease() {
-  if (!dubHeld || !dubIsPlaying) return;
+// force=true corta siempre (release corto); force=false respeta DECAY ∞ (drone)
+function dubRelease(force) {
+  if (!dubIsPlaying) return;
+  const infinite = (dubState.decay === Infinity);
+
+  // Mantener con DECAY al máximo: se queda sonando (drone), no cae
+  if (dubHeld && infinite && !force) {
+    dubHeld = false;
+    dubDroning = true;
+    dubHeldPad = null;
+    document.querySelectorAll("#dub-pads .ds71-pad").forEach(p => p.classList.remove("active"));
+    return;
+  }
+  if (!dubHeld && !dubDroning) return;
+
   dubHeld = false;
+  dubDroning = false;
   const ctx = dubAudioCtx;
   const now = ctx.currentTime;
-  const decay = dubState.decay;
+  const decay = force ? 0.3 : (infinite ? 0.3 : dubState.decay);
 
   // VCA -> silencio
   const cur = Math.max(dubVca.gain.value, 0.0001);
@@ -2992,6 +3008,7 @@ function dubStopTone() {
   dubAnalyserTime = dubAnalyserFreq = null;
   dubIsPlaying = false;
   dubHeld = false;
+  dubDroning = false;
   dubHeldPad = null;
   dubLatchedPad = null;
   if (dubRafId) cancelAnimationFrame(dubRafId);
@@ -3084,10 +3101,20 @@ function dubSetBankLeds() {
 }
 
 // Knob giratorio con arrastre vertical y rueda
-function makeDubKnob(knobEl, norm0, onChange) {
+function makeDubKnob(knobEl, norm0, onChange, format) {
   const face = knobEl.querySelector(".knob-face");
+  const wrap = knobEl.closest(".knob-wrap");
+  let valEl = wrap ? wrap.querySelector(".knob-val") : null;
+  if (!valEl && wrap && format) {
+    valEl = document.createElement("div");
+    valEl.className = "knob-val";
+    wrap.appendChild(valEl);
+  }
   let norm = norm0;
-  function render() { face.style.transform = `rotate(${-135 + norm * 270}deg)`; }
+  function render() {
+    face.style.transform = `rotate(${-135 + norm * 270}deg)`;
+    if (valEl && format) valEl.textContent = format(norm);
+  }
   function setNorm(n) { norm = Math.max(0, Math.min(1, n)); render(); onChange(norm); }
   render();
 
@@ -3115,22 +3142,24 @@ function initDubControls() {
   // Knobs
   makeDubKnob(document.getElementById("dub-volume-knob"), 0.8, n => {
     dubState.volume = dubLinMap(n, 0, 1); dubApplyVolume();
-  });
+  }, n => (n * 10).toFixed(1));
   makeDubKnob(document.getElementById("dub-decay-knob"), 0.35, n => {
-    dubState.decay = dubExpMap(n, 0.05, 4.0);
-  });
+    dubState.decay = n >= 0.985 ? Infinity : dubExpMap(n, 0.05, 4.0);
+    // si hay un drone infinito sonando y bajas el DECAY, empieza a caer
+    if (dubDroning && dubState.decay !== Infinity) dubRelease(false);
+  }, n => n >= 0.985 ? "∞" : dubExpMap(n, 0.05, 4.0).toFixed(2) + " s");
   makeDubKnob(document.getElementById("dub-depth-knob"), 0.35, n => {
     dubState.depth = dubLinMap(n, 0, 1); dubApplyDepth();
-  });
+  }, n => Math.round(n * 100) + " %");
   makeDubKnob(document.getElementById("dub-tune-knob"), 0.45, n => {
     dubState.tune = dubExpMap(n, 30, 9000); dubApplyTune();
-  });
+  }, n => { const f = dubExpMap(n, 30, 9000); return f >= 1000 ? (f / 1000).toFixed(2) + " kHz" : Math.round(f) + " Hz"; });
   makeDubKnob(document.getElementById("dub-sweep-knob"), 0.5, n => {
     dubState.sweep = n * 2 - 1;
-  });
+  }, n => { const s = n * 2 - 1; return Math.abs(s) < 0.05 ? "FLAT" : (s < 0 ? "UP " : "DN ") + Math.round(Math.abs(s) * 100) + "%"; });
   makeDubKnob(document.getElementById("dub-rate-knob"), 0.4, n => {
     dubState.rate = dubExpMap(n, 0.1, 30); dubApplyRate();
-  });
+  }, n => dubExpMap(n, 0.1, 30).toFixed(2) + " Hz");
   makeDubKnob(document.getElementById("dub-tone-knob"), 0.5, n => {
     dubState.toneDb = (n - 0.5) * 30; dubApplyTone();
   });
@@ -3429,28 +3458,30 @@ function initRackControls() {
 
   // Knobs del Echo (los nodos existen tras rackBuildBackbone; guardas por si aún no)
   const D = rackEchoDefaults;
+  const fmtHz = n => { const f = dubExpMap(n, 20, 2000); return f >= 1000 ? (f / 1000).toFixed(2) + " kHz" : Math.round(f) + " Hz"; };
+  const fmtHz2 = n => { const f = dubExpMap(n, 200, 16000); return f >= 1000 ? (f / 1000).toFixed(2) + " kHz" : Math.round(f) + " Hz"; };
   makeDubKnob(document.getElementById("rack-echo-time-knob"), D.time, n => {
     if (rackEcho) rackEcho.nodes.delay.delayTime.setTargetAtTime(dubExpMap(n, 0.07, 1.2), rackAudioCtx.currentTime, 0.03);
-  });
+  }, n => (dubExpMap(n, 0.07, 1.2) * 1000).toFixed(0) + " ms");
   makeDubKnob(document.getElementById("rack-echo-fb-knob"), D.fb, n => {
     if (rackEcho) rackEcho.nodes.fb.gain.setTargetAtTime(0.92 * n, rackAudioCtx.currentTime, 0.02);
-  });
+  }, n => Math.round(n * 100) + " %");
   makeDubKnob(document.getElementById("rack-echo-mix-knob"), D.mix, n => {
     if (rackEcho) {
       const now = rackAudioCtx.currentTime;
       rackEcho.nodes.dry.gain.setTargetAtTime(1 - n, now, 0.02);
       rackEcho.nodes.wet.gain.setTargetAtTime(n, now, 0.02);
     }
-  });
+  }, n => Math.round(n * 100) + "% wet");
   makeDubKnob(document.getElementById("rack-echo-hp-knob"), D.hp, n => {
     if (rackEcho) rackEcho.nodes.hp.frequency.setTargetAtTime(dubExpMap(n, 20, 2000), rackAudioCtx.currentTime, 0.02);
-  });
+  }, fmtHz);
   makeDubKnob(document.getElementById("rack-echo-lp-knob"), D.lp, n => {
     if (rackEcho) rackEcho.nodes.lp.frequency.setTargetAtTime(dubExpMap(n, 200, 16000), rackAudioCtx.currentTime, 0.02);
-  });
+  }, fmtHz2);
   makeDubKnob(document.getElementById("rack-echo-depth-knob"), D.mod, n => {
     if (rackEcho) rackEcho.nodes.lfoGain.gain.setTargetAtTime(0.006 * n, rackAudioCtx.currentTime, 0.02);
-  });
+  }, n => Math.round(n * 100) + " %");
 }
 
 function rackInit() {

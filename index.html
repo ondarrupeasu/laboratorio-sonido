@@ -827,11 +827,15 @@
   .knob.small { width: 32px; height: 32px; }
   .knob:active { cursor: grabbing; }
   .knob::before {
-    content: ""; position: absolute; inset: -5px; border-radius: 50%;
-    background:
-      repeating-conic-gradient(from -135deg, #4a4a4e 0deg 1.5deg, transparent 1.5deg 12deg);
-    -webkit-mask: radial-gradient(circle, transparent 60%, #000 61%);
-    mask: radial-gradient(circle, transparent 60%, #000 61%);
+    content: ""; position: absolute; inset: -7px; border-radius: 50%;
+    background: repeating-conic-gradient(from -132deg, #a6a6ac 0deg 1.2deg, transparent 1.2deg 9deg);
+    -webkit-mask: radial-gradient(circle, transparent 60%, #000 62%, #000 82%, transparent 84%);
+    mask: radial-gradient(circle, transparent 60%, #000 62%, #000 82%, transparent 84%);
+  }
+  .knob.small::before { display: none; }
+  .knob-val {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 10px; color: #d0d0d4; margin-top: 1px; min-height: 12px; letter-spacing: 0.2px;
   }
   .knob-face {
     position: absolute; inset: 0; border-radius: 50%;
