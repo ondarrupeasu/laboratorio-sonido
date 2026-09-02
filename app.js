@@ -3254,7 +3254,9 @@ document.addEventListener("DOMContentLoaded", dubInit);
 let rackAudioCtx = null, rackMaster = null, rackAnalyserTime = null, rackAnalyserFreq = null;
 let rackSourceGain = null;
 let rackToneOsc = null, rackBufferSrc = null, rackBuffer = null;
-let rackEcho = null;
+let rackEcho = null, rackPhase = null, rackSpring = null;
+let rackModules = [];       // efectos en orden dentro de la cadena
+const rackBypass = { echo: false, phase: false, spring: false };
 let rackBackbone = false;   // grafo fijo creado
 let rackIsPlaying = false;  // hay generador sonando
 let rackRafId = null;
@@ -3307,6 +3309,93 @@ function makeRackEcho(ctx) {
   };
 }
 
+// Phaser óptico (cadena de filtros all-pass modulados por LFO)
+const rackPhaseDefaults = { rate: 0.35, depth: 0.4, centre: 0.45, fb: 0.3 };
+function makeRackPhase(ctx) {
+  const input = ctx.createGain(), output = ctx.createGain();
+  const bypassGain = ctx.createGain(); bypassGain.gain.value = 0;
+  const activeGain = ctx.createGain(); activeGain.gain.value = 1;
+  const dry = ctx.createGain(); dry.gain.value = 0.5;
+  const wet = ctx.createGain(); wet.gain.value = 0.5;
+  const stages = []; const N = 6;
+  for (let i = 0; i < N; i++) {
+    const ap = ctx.createBiquadFilter(); ap.type = "allpass";
+    ap.frequency.value = dubExpMap(rackPhaseDefaults.centre, 200, 2000); ap.Q.value = 1;
+    stages.push(ap);
+  }
+  const fb = ctx.createGain(); fb.gain.value = 0.7 * rackPhaseDefaults.fb;
+  const lfo = ctx.createOscillator(); lfo.type = "sine"; lfo.frequency.value = dubExpMap(rackPhaseDefaults.rate, 0.05, 8);
+  const lfoGain = ctx.createGain(); lfoGain.gain.value = 1500 * rackPhaseDefaults.depth;
+
+  input.connect(bypassGain); bypassGain.connect(output);
+  input.connect(dry); dry.connect(activeGain);
+  input.connect(stages[0]);
+  for (let i = 0; i < N - 1; i++) stages[i].connect(stages[i + 1]);
+  stages[N - 1].connect(wet); wet.connect(activeGain);
+  stages[N - 1].connect(fb); fb.connect(stages[0]);
+  activeGain.connect(output);
+  lfo.connect(lfoGain); stages.forEach(ap => lfoGain.connect(ap.frequency));
+  lfo.start();
+
+  return {
+    input, output, nodes: { stages, fb, lfo, lfoGain }, bypassed: false,
+    setBypass(b) { this.bypassed = b; bypassGain.gain.value = b ? 1 : 0; activeGain.gain.value = b ? 0 : 1; }
+  };
+}
+
+// Respuesta de impulso sintética de reverb de muelles (ruido con caída + "boing")
+function makeSpringIR(ctx) {
+  const dur = 2.2, sr = ctx.sampleRate, len = Math.floor(dur * sr);
+  const buf = ctx.createBuffer(2, len, sr);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = buf.getChannelData(ch);
+    for (let i = 0; i < len; i++) {
+      const t = i / sr;
+      const env = Math.exp(-t * 4.5);
+      let s = (Math.random() * 2 - 1) * env;
+      s += Math.sin(2 * Math.PI * (1200 + t * 3000) * t) * env * 0.25 * Math.exp(-t * 8); // chirp de muelle
+      d[i] = s;
+    }
+  }
+  return buf;
+}
+
+// Spring Amp III (reverb de muelles + filtro con LFO)
+const rackSpringDefaults = { mix: 0.4, cutoff: 0.6, reso: 0.2, rate: 0.3, depth: 0.0 };
+function makeRackSpring(ctx) {
+  const input = ctx.createGain(), output = ctx.createGain();
+  const bypassGain = ctx.createGain(); bypassGain.gain.value = 0;
+  const activeGain = ctx.createGain(); activeGain.gain.value = 1;
+  const dry = ctx.createGain(); dry.gain.value = 0.85;
+  const filter = ctx.createBiquadFilter(); filter.type = "lowpass";
+  filter.frequency.value = dubExpMap(rackSpringDefaults.cutoff, 200, 12000);
+  filter.Q.value = dubLinMap(rackSpringDefaults.reso, 0.5, 15);
+  const conv = ctx.createConvolver(); conv.buffer = makeSpringIR(ctx);
+  const rev = ctx.createGain(); rev.gain.value = rackSpringDefaults.mix;
+  const lfo = ctx.createOscillator(); lfo.type = "sine"; lfo.frequency.value = dubExpMap(rackSpringDefaults.rate, 0.05, 8);
+  const lfoGain = ctx.createGain(); lfoGain.gain.value = 3000 * rackSpringDefaults.depth;
+
+  input.connect(bypassGain); bypassGain.connect(output);
+  input.connect(dry); dry.connect(activeGain);
+  input.connect(filter); filter.connect(conv); conv.connect(rev); rev.connect(activeGain);
+  activeGain.connect(output);
+  lfo.connect(lfoGain); lfoGain.connect(filter.frequency); lfo.start();
+
+  return {
+    input, output, nodes: { filter, conv, rev, lfo, lfoGain }, bypassed: false,
+    setBypass(b) { this.bypassed = b; bypassGain.gain.value = b ? 1 : 0; activeGain.gain.value = b ? 0 : 1; }
+  };
+}
+
+// Conecta la cadena en el orden de rackModules
+function rackReconnect() {
+  try { rackSourceGain.disconnect(); } catch (e) {}
+  rackModules.forEach(m => { try { m.output.disconnect(); } catch (e) {} });
+  let prev = rackSourceGain;
+  for (const m of rackModules) { prev.connect(m.input); prev = m.output; }
+  prev.connect(rackMaster);
+}
+
 function rackBuildBackbone() {
   if (rackBackbone) return;
   rackEnsureContext();
@@ -3316,13 +3405,19 @@ function rackBuildBackbone() {
   rackAnalyserTime = ctx.createAnalyser(); rackAnalyserTime.fftSize = 2048;
   rackAnalyserFreq = ctx.createAnalyser(); rackAnalyserFreq.fftSize = 2048;
   rackEcho = makeRackEcho(ctx);
+  rackPhase = makeRackPhase(ctx);
+  rackSpring = makeRackSpring(ctx);
+  rackModules = [rackEcho, rackPhase, rackSpring];
 
-  // cadena: fuente -> echo -> master -> analizadores + salida
-  rackSourceGain.connect(rackEcho.input);
-  rackEcho.output.connect(rackMaster);
+  // salida: master -> analizadores + destino
   rackMaster.connect(rackAnalyserTime);
   rackMaster.connect(rackAnalyserFreq);
   rackMaster.connect(ctx.destination);
+  // cadena: fuente -> echo -> phase -> spring -> master
+  rackReconnect();
+  rackEcho.setBypass(rackBypass.echo);
+  rackPhase.setBypass(rackBypass.phase);
+  rackSpring.setBypass(rackBypass.spring);
   rackBackbone = true;
 }
 
@@ -3448,13 +3543,19 @@ function initRackControls() {
     if (e.target.files && e.target.files[0]) rackLoadFile(e.target.files[0]);
   });
 
-  // Bypass del Echo
-  const bypassBtn = document.getElementById("rack-echo-bypass");
-  bypassBtn.addEventListener("click", () => {
-    const b = !(rackEcho && rackEcho.bypassed);
-    if (rackEcho) rackEcho.setBypass(b);
-    bypassBtn.classList.toggle("on", b);
-  });
+  // Bypass de cada módulo (recuerda el estado aunque aún no exista el grafo)
+  const rackModuleOf = key => key === "echo" ? rackEcho : key === "phase" ? rackPhase : rackSpring;
+  [["rack-echo-bypass", "echo"], ["rack-phase-bypass", "phase"], ["rack-spring-bypass", "spring"]]
+    .forEach(([btnId, key]) => {
+      const btn = document.getElementById(btnId);
+      if (!btn) return;
+      btn.addEventListener("click", () => {
+        rackBypass[key] = !rackBypass[key];
+        const mod = rackModuleOf(key);
+        if (mod) mod.setBypass(rackBypass[key]);
+        btn.classList.toggle("on", rackBypass[key]);
+      });
+    });
 
   // Knobs del Echo (los nodos existen tras rackBuildBackbone; guardas por si aún no)
   const D = rackEchoDefaults;
@@ -3481,6 +3582,39 @@ function initRackControls() {
   }, fmtHz2);
   makeDubKnob(document.getElementById("rack-echo-depth-knob"), D.mod, n => {
     if (rackEcho) rackEcho.nodes.lfoGain.gain.setTargetAtTime(0.006 * n, rackAudioCtx.currentTime, 0.02);
+  }, n => Math.round(n * 100) + " %");
+
+  // Knobs del Phase
+  const P = rackPhaseDefaults;
+  makeDubKnob(document.getElementById("rack-phase-rate-knob"), P.rate, n => {
+    if (rackPhase) rackPhase.nodes.lfo.frequency.setTargetAtTime(dubExpMap(n, 0.05, 8), rackAudioCtx.currentTime, 0.02);
+  }, n => dubExpMap(n, 0.05, 8).toFixed(2) + " Hz");
+  makeDubKnob(document.getElementById("rack-phase-depth-knob"), P.depth, n => {
+    if (rackPhase) rackPhase.nodes.lfoGain.gain.setTargetAtTime(1500 * n, rackAudioCtx.currentTime, 0.02);
+  }, n => Math.round(n * 100) + " %");
+  makeDubKnob(document.getElementById("rack-phase-centre-knob"), P.centre, n => {
+    if (rackPhase) { const f = dubExpMap(n, 200, 2000), now = rackAudioCtx.currentTime; rackPhase.nodes.stages.forEach(ap => ap.frequency.setTargetAtTime(f, now, 0.02)); }
+  }, n => Math.round(dubExpMap(n, 200, 2000)) + " Hz");
+  makeDubKnob(document.getElementById("rack-phase-fb-knob"), P.fb, n => {
+    if (rackPhase) rackPhase.nodes.fb.gain.setTargetAtTime(0.7 * n, rackAudioCtx.currentTime, 0.02);
+  }, n => Math.round(n * 100) + " %");
+
+  // Knobs del Spring Amp III
+  const S = rackSpringDefaults;
+  makeDubKnob(document.getElementById("rack-spring-mix-knob"), S.mix, n => {
+    if (rackSpring) rackSpring.nodes.rev.gain.setTargetAtTime(n, rackAudioCtx.currentTime, 0.02);
+  }, n => Math.round(n * 100) + " %");
+  makeDubKnob(document.getElementById("rack-spring-cutoff-knob"), S.cutoff, n => {
+    if (rackSpring) rackSpring.nodes.filter.frequency.setTargetAtTime(dubExpMap(n, 200, 12000), rackAudioCtx.currentTime, 0.02);
+  }, n => { const f = dubExpMap(n, 200, 12000); return f >= 1000 ? (f / 1000).toFixed(2) + " kHz" : Math.round(f) + " Hz"; });
+  makeDubKnob(document.getElementById("rack-spring-reso-knob"), S.reso, n => {
+    if (rackSpring) rackSpring.nodes.filter.Q.setTargetAtTime(dubLinMap(n, 0.5, 15), rackAudioCtx.currentTime, 0.02);
+  }, n => "Q " + dubLinMap(n, 0.5, 15).toFixed(1));
+  makeDubKnob(document.getElementById("rack-spring-rate-knob"), S.rate, n => {
+    if (rackSpring) rackSpring.nodes.lfo.frequency.setTargetAtTime(dubExpMap(n, 0.05, 8), rackAudioCtx.currentTime, 0.02);
+  }, n => dubExpMap(n, 0.05, 8).toFixed(2) + " Hz");
+  makeDubKnob(document.getElementById("rack-spring-depth-knob"), S.depth, n => {
+    if (rackSpring) rackSpring.nodes.lfoGain.gain.setTargetAtTime(3000 * n, rackAudioCtx.currentTime, 0.02);
   }, n => Math.round(n * 100) + " %");
 }
 

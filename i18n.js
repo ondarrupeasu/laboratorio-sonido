@@ -131,6 +131,8 @@ const I18N = {
     rack_guide_title: "Cómo funciona",
     rack_g_source: "Fuente — el sonido de partida (tono de prueba o tu audio; pronto: sirena DS71 y micro).",
     rack_g_echo: "Digital Echo — delay con realimentación, filtros HP/LP y modulación (wow).",
+    rack_g_phase: "Phase — phaser de barrido: RATE, DEPTH, CENTRE (frecuencia central) y FEEDBACK.",
+    rack_g_spring: "Spring Amp III — reverb de muelles con filtro: REVERB (mezcla), CUTOFF, RESO y modulación.",
     rack_g_bypass: "Bypass — desactiva un efecto sin quitarlo, para comparar.",
     rack_attribution: "Prototipo educativo inspirado en los efectos de Benidub Audio Electronics. Marcas de sus propietarios; sin afiliación."
   },
@@ -266,6 +268,8 @@ const I18N = {
     rack_guide_title: "Nola dabilen",
     rack_g_source: "Iturria — abiapuntuko soinua (proba-tonua edo zure audioa; laster: DS71 sirena eta mikro).",
     rack_g_echo: "Digital Echo — atzeraelikadura duen delaya, HP/LP iragazkiak eta modulazioa (wow).",
+    rack_g_phase: "Phase — barrido phaserra: RATE, DEPTH, CENTRE (erdiko maiztasuna) eta FEEDBACK.",
+    rack_g_spring: "Spring Amp III — malguki-erreberberazioa iragazkiarekin: REVERB (nahasketa), CUTOFF, RESO eta modulazioa.",
     rack_g_bypass: "Bypass — efektua kendu gabe desaktibatzen du, alderatzeko.",
     rack_attribution: "Benidub Audio Electronics-en efektuetan inspiratutako prototipo hezitzailea. Marka bakoitza bere jabeena da; loturarik gabe."
   },
@@ -401,6 +405,8 @@ const I18N = {
     rack_guide_title: "How it works",
     rack_g_source: "Source — the starting sound (test tone or your audio; soon: DS71 siren and mic).",
     rack_g_echo: "Digital Echo — delay with feedback, HP/LP filters and modulation (wow).",
+    rack_g_phase: "Phase — sweeping phaser: RATE, DEPTH, CENTRE frequency and FEEDBACK.",
+    rack_g_spring: "Spring Amp III — spring reverb with filter: REVERB (mix), CUTOFF, RESO and modulation.",
     rack_g_bypass: "Bypass — disables an effect without removing it, to compare.",
     rack_attribution: "Educational prototype inspired by Benidub Audio Electronics effects. Trademarks belong to their owners; not affiliated."
   }
