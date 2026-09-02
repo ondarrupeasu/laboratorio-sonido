@@ -3749,7 +3749,8 @@ document.addEventListener("DOMContentLoaded", rackInit);
    ============================================================ */
 
 let smpAudioCtx = null, smpMaster = null, smpAnalyser = null, smpRafId = null, smpVisualRunning = false;
-const smpPads = Array.from({ length: 8 }, () => ({ buffer: null, name: null }));
+const smpPads = Array.from({ length: 8 }, () => ({ buffer: null, name: null, loop: false }));
+const smpActiveSources = Array(8).fill(null);   // BufferSource sonando en bucle por pad
 let smpMediaStream = null, smpRecorder = null, smpRecChunks = [], smpRecPad = -1;
 let smpLoadTarget = -1;
 
@@ -3772,17 +3773,44 @@ function smpGetMic() {
   return navigator.mediaDevices.getUserMedia({ audio: true }).then(s => { smpMediaStream = s; return s; });
 }
 
-// Disparar un pad (reproduce su sample una vez)
+// Beep corto (count-in / avisos), directo a la salida
+function smpBeep(freq, dur) {
+  smpEnsureContext();
+  const o = smpAudioCtx.createOscillator(), g = smpAudioCtx.createGain();
+  o.type = "sine"; o.frequency.value = freq;
+  o.connect(g); g.connect(smpAudioCtx.destination);
+  const now = smpAudioCtx.currentTime;
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.exponentialRampToValueAtTime(0.25, now + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+  o.start(now); o.stop(now + dur + 0.02);
+}
+
+// Parar el bucle de un pad
+function smpStopPad(i) {
+  if (smpActiveSources[i]) { try { smpActiveSources[i].stop(); } catch (e) {} try { smpActiveSources[i].disconnect(); } catch (e) {} smpActiveSources[i] = null; }
+  const pad = smpPadEl(i); if (pad) pad.classList.remove("playing");
+}
+
+// Disparar un pad (one-shot, o toggle de bucle si loop está activo)
 function smpPlayPad(i) {
   if (!smpPads[i].buffer) return;
   smpEnsureContext();
-  const src = smpAudioCtx.createBufferSource();
-  src.buffer = smpPads[i].buffer;
-  src.connect(smpMaster);
-  src.start();
-  const pad = smpPadEl(i);
-  pad.classList.add("active");
-  setTimeout(() => pad.classList.remove("active"), 140);
+  if (smpPads[i].loop) {
+    if (smpActiveSources[i]) { smpStopPad(i); return; }   // ya sonaba en bucle -> parar
+    const src = smpAudioCtx.createBufferSource();
+    src.buffer = smpPads[i].buffer; src.loop = true;
+    src.connect(smpMaster); src.start();
+    smpActiveSources[i] = src;
+    smpPadEl(i).classList.add("playing");
+  } else {
+    const src = smpAudioCtx.createBufferSource();
+    src.buffer = smpPads[i].buffer;
+    src.connect(smpMaster); src.start();
+    const pad = smpPadEl(i);
+    pad.classList.add("active");
+    setTimeout(() => pad.classList.remove("active"), 140);
+  }
   if (!smpVisualRunning) smpStartVisual();
 }
 
@@ -3796,9 +3824,11 @@ function smpAssign(i, buffer, name) {
 }
 
 function smpClearPad(i) {
-  smpPads[i] = { buffer: null, name: null };
+  smpStopPad(i);
+  smpPads[i] = { buffer: null, name: null, loop: false };
   const pad = smpPadEl(i);
   pad.classList.remove("has-sample");
+  pad.querySelector(".smp-loop").classList.remove("on");
   const nameEl = pad.querySelector(".smp-pad-name");
   nameEl.setAttribute("data-i18n", "smp_empty");
   nameEl.textContent = t("smp_empty");
@@ -3825,6 +3855,7 @@ function smpToggleRecord(i) {
     smpRecorder = new MediaRecorder(stream);
     smpRecorder.ondataavailable = e => { if (e.data.size) smpRecChunks.push(e.data); };
     smpRecorder.onstop = () => {
+      smpBeep(523, 0.1);   // beep de fin
       const pad = smpPadEl(smpRecPad);
       pad.classList.remove("recording");
       pad.querySelector(".smp-rec").classList.remove("recording");
@@ -3835,13 +3866,19 @@ function smpToggleRecord(i) {
         .then(buf => smpAssign(padIdx, buf, "REC " + (padIdx + 1)))
         .catch(() => {});
     };
-    smpRecorder.start();
+    // Count-in: beep y, un pelín después, empieza a grabar (para que el beep no entre)
+    smpBeep(880, 0.12);
     const pad = smpPadEl(i);
-    pad.classList.add("recording");
-    pad.querySelector(".smp-rec").classList.add("recording");
     const nameEl = pad.querySelector(".smp-pad-name");
     nameEl.removeAttribute("data-i18n");
-    nameEl.textContent = t("smp_recording");
+    nameEl.textContent = "…";
+    setTimeout(() => {
+      if (smpRecPad !== i || !smpRecorder) return;
+      smpRecorder.start();
+      pad.classList.add("recording");
+      pad.querySelector(".smp-rec").classList.add("recording");
+      nameEl.textContent = t("smp_recording");
+    }, 170);
   }).catch(() => {
     const nameEl = smpPadEl(i).querySelector(".smp-pad-name");
     nameEl.removeAttribute("data-i18n");
@@ -3876,6 +3913,7 @@ function smpStopVisual() {
 
 function smpOnLeave() {
   if (smpRecorder && smpRecorder.state === "recording") { try { smpRecorder.stop(); } catch (e) {} }
+  for (let i = 0; i < 8; i++) smpStopPad(i);   // parar bucles
   smpStopVisual();
   smpClearCanvases();
 }
@@ -3885,6 +3923,11 @@ function initSamplerControls() {
     const i = parseInt(pad.dataset.pad, 10);
     pad.querySelector(".smp-pad-body").addEventListener("pointerdown", e => { e.preventDefault(); smpPlayPad(i); });
     pad.querySelector(".smp-rec").addEventListener("click", () => smpToggleRecord(i));
+    pad.querySelector(".smp-loop").addEventListener("click", () => {
+      smpPads[i].loop = !smpPads[i].loop;
+      pad.querySelector(".smp-loop").classList.toggle("on", smpPads[i].loop);
+      if (!smpPads[i].loop && smpActiveSources[i]) smpStopPad(i);   // al quitar loop, parar
+    });
     pad.querySelector(".smp-load").addEventListener("click", () => {
       smpLoadTarget = i;
       document.getElementById("smp-file-input").click();
